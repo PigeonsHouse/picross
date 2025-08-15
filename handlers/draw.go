@@ -12,21 +12,21 @@ import (
 
 // 回答用の配列を見て、指定されたパスに回答のイラストを出力する
 func DrawAnswerImage(answer schemas.Answer, outputPath string) {
-	my := 40
-	mt := 120
-	mb := 30
-	bw := 30
-	bf := 2
-	horizontalLength := answer.GetLength(true)
-	verticalLength := answer.GetLength(false)
+	marginX := 40
+	marginTop := 120
+	marginBottom := 30
+	boxWidth := 30
+	boxBorderWidth := 2
+	horizontalCellNumber := answer.GetLength(true)
+	verticalCellNumber := answer.GetLength(false)
 
 	// 大元の画像を作成
 	img := image.NewRGBA(
 		image.Rect(
 			0,
 			0,
-			2*my+bf+bw*horizontalLength,
-			mt+mb+bf+bw*verticalLength,
+			marginX*2+(boxBorderWidth+boxWidth)*horizontalCellNumber+boxBorderWidth,
+			marginTop+marginBottom+(boxBorderWidth+boxWidth)*verticalCellNumber+boxBorderWidth,
 		),
 	)
 	// 白で塗りつぶす
@@ -35,10 +35,10 @@ func DrawAnswerImage(answer schemas.Answer, outputPath string) {
 	draw.Draw(
 		img,
 		image.Rect(
-			my,
-			mt,
-			my+bf+bw*horizontalLength,
-			mt+bf+bw*verticalLength,
+			marginX,
+			marginTop,
+			marginX+(boxBorderWidth+boxWidth)*horizontalCellNumber+boxBorderWidth,
+			marginTop+(boxBorderWidth+boxWidth)*verticalCellNumber+boxBorderWidth,
 		),
 		&image.Uniform{color.Black},
 		image.Point{0, 0}, draw.Src,
@@ -57,10 +57,10 @@ func DrawAnswerImage(answer schemas.Answer, outputPath string) {
 			draw.Draw(
 				img,
 				image.Rect(
-					my+bw*x+bf,
-					mt+bw*y+bf,
-					my+bw*(x+1),
-					mt+bw*(y+1),
+					marginX+boxBorderWidth+(boxWidth+boxBorderWidth)*x,
+					marginTop+boxBorderWidth+(boxWidth+boxBorderWidth)*y,
+					marginX+(boxBorderWidth+boxWidth)*(x+1),
+					marginTop+(boxBorderWidth+boxWidth)*(y+1),
 				),
 				&image.Uniform{fillColor},
 				image.Point{0, 0},
