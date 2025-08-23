@@ -46,6 +46,8 @@ func DrawAnswerImage(answer schemas.Answer, outputPath string) {
 
 	for y, inner := range answer.GetData() {
 		for x, data := range inner {
+			// マスの中身に応じて色を変える
+			// 1: 黒、-1: 灰色、0: 白
 			var fillColor color.Color
 			if data == 1 {
 				fillColor = color.RGBA{32, 32, 32, 255}
@@ -54,6 +56,7 @@ func DrawAnswerImage(answer schemas.Answer, outputPath string) {
 			} else {
 				fillColor = color.White
 			}
+			// マスを描画
 			draw.Draw(
 				img,
 				image.Rect(
@@ -69,12 +72,14 @@ func DrawAnswerImage(answer schemas.Answer, outputPath string) {
 		}
 	}
 
+	// 既にファイルが存在している場合は削除する
 	if _, err := os.Stat(outputPath); err == nil {
 		os.Remove(outputPath)
 	} else if !os.IsNotExist(err) {
 		fmt.Println("ファイルの存在確認中にエラーが発生しました:", err)
 		return
 	}
+	// ファイルを保存
 	saveFile, _ := os.Create(outputPath)
 	defer saveFile.Close()
 	png.Encode(saveFile, img)
