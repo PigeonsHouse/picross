@@ -1,5 +1,7 @@
 package handlers
 
+import "reflect"
+
 // answerLineを埋める関数をまとめる
 func SolveLine(quizLine []int, answerLine []int) (isChanged bool) {
 	if len(quizLine) == 0 {
@@ -11,9 +13,10 @@ func SolveLine(quizLine []int, answerLine []int) (isChanged bool) {
 	}
 	isChanged = isChanged || withoutEdgeCross(solveLineFirst, quizLine, answerLine)
 	isChanged = isChanged || withoutEdgeCross(solveLineEdge, quizLine, answerLine)
-
 	// TODO: 他の解法関数を追加する
 	// 例) isChanged = isChanged || someSolveFunction()
+
+	isChanged = isChanged || fillBrankInComplete(quizLine, answerLine)
 
 	return
 }
@@ -136,6 +139,39 @@ func solveLineEdge(quizLine []int, answerLine []int) (isChanged bool) {
 				answerLine[i] = 1
 				isChanged = true
 			}
+		}
+	}
+
+	return
+}
+
+func fillBrankInComplete(quizLine []int, answerLine []int) (isChanged bool) {
+	// answerLineが解き終わっているか確認する
+	var currentLine []int
+	valContinue := false
+	for _, v := range answerLine {
+		if v == 1 {
+			if valContinue {
+				currentLine[len(currentLine)-1] += 1
+			} else {
+				currentLine = append(currentLine, 1)
+			}
+		}
+		valContinue = v == 1
+	}
+	// currentLineが空の場合、[0]とする
+	if len(currentLine) == 0 {
+		currentLine = []int{0}
+	}
+	// まだ解き終わっていない場合は何もしない
+	if !reflect.DeepEqual(quizLine, currentLine) {
+		return
+	}
+	// 0を-1に変える
+	for i, v := range answerLine {
+		if v == 0 {
+			answerLine[i] = -1
+			isChanged = true
 		}
 	}
 
