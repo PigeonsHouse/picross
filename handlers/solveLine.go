@@ -1,8 +1,24 @@
 package handlers
 
-import "reflect"
+import "fmt"
 
-// answerLineを埋める関数をまとめる
+type QuizItem struct {
+	index int
+	value int
+}
+
+type ItemRange struct {
+	start int // itemの左端が入りうる開始位置(全域の場合0が入る)
+	end   int // itemの右端が入りうる終了位置(全域の場合len(answerLine)-1が入る)
+	item  QuizItem
+}
+
+func (ir ItemRange) Length() int {
+	return ir.end - ir.start + 1
+}
+
+// quizLine: クイズの行 (例: [3, 1, 2])
+// answerLine: 解答の行 (例: [0, -1, 1, 0, 0, -1, 0])
 func SolveLine(quizLine []int, answerLine []int) (isChanged bool) {
 	if len(quizLine) == 0 {
 		panic("quizLineの長さが0")
@@ -11,12 +27,69 @@ func SolveLine(quizLine []int, answerLine []int) (isChanged bool) {
 	if !hasZero(answerLine) {
 		return
 	}
-	isChanged = isChanged || withoutEdgeCross(solveLineFirst, quizLine, answerLine)
-	isChanged = isChanged || withoutEdgeCross(solveLineEdge, quizLine, answerLine)
-	// TODO: 他の解法関数を追加する
-	// 例) isChanged = isChanged || someSolveFunction()
 
-	isChanged = isChanged || fillBrankInComplete(quizLine, answerLine)
+	// answerLineを-1でsplitして、0と1の塊に分ける(-1の連続は1つにまとめる)
+	splittedAnswerLines := SplitAnswerLine(answerLine)
+
+	// splittedAnswerLinesの各要素に、quizLineの要素をどう割り当てられるか、パターンを全探索する
+	quizPatterns := GenerateQuizPatterns(quizLine, splittedAnswerLines)
+	fmt.Println("splittedAnswerLines", splittedAnswerLines, "patterns:", quizPatterns)
+
+	itemRangeListPatterns := make([][]ItemRange, len(quizPatterns), len(splittedAnswerLines[0]))
+	for h, splitedQuiz := range quizPatterns {
+		for i := range splittedAnswerLines {
+			partQuiz := splitedQuiz[i]
+			answer := splittedAnswerLines[i]
+			itemRangeListPatterns[h] = make([]ItemRange, len(partQuiz))
+
+			for j, quizItem := range partQuiz {
+				// quizItem以外の、左のvalueの合計+item数-1、右のvalueの合計+item数-1を、左右から引いて、quizItemの入りうる位置を特定する
+				leftMin := 0
+				for k := 0; k < j; k++ {
+					leftMin += partQuiz[k].value + 1
+				}
+				rightMin := 0
+				for k := j + 1; k < len(partQuiz); k++ {
+					rightMin += partQuiz[k].value + 1
+				}
+
+				// TODO: answerの値をintからQuizItemにして、indexとvalueが同じQuizItemの場合はその黒から届く範囲がitemRangeとする
+
+				itemRangeListPatterns[h][j] = ItemRange{
+					start: leftMin,
+					end:   len(answer) - 1 - rightMin,
+					item:  quizItem,
+				}
+			}
+		}
+	}
+	// start, endを全パターンで比較して、最も広い範囲をitemRangeとする
+	maxItemRangeList := make([]ItemRange, len(quizLine))
+	for _, itemRangeList := range itemRangeListPatterns {
+		for i, itemRange := range itemRangeList {
+			if itemRange.start < maxItemRangeList[i].start {
+				maxItemRangeList[i].start = itemRange.start
+			}
+			if itemRange.end > maxItemRangeList[i].end {
+				maxItemRangeList[i].end = itemRange.end
+			}
+		}
+	}
+	// maxItemRangeの長さが、itemの長さの2倍未満の場合、itemRangeの中央部分は必ず黒になるので、answerLineを更新する
+	for _, maxItemRange := range maxItemRangeList {
+		itemRangeLength := maxItemRange.Length()
+		if itemRangeLength < maxItemRange.item.value*2 {
+			// itemRangeの長さが、itemの長さの2倍未満の場合、itemRangeの中央部分は必ず黒になる
+			midStart := maxItemRange.end - maxItemRange.item.value
+			midEnd := maxItemRange.start + maxItemRange.item.value - 1
+			for k := midStart; k <= midEnd; k++ {
+				if answerLine[k] != 1 {
+					answerLine[k] = 1
+					isChanged = true
+				}
+			}
+		}
+	}
 
 	return
 }
@@ -30,150 +103,71 @@ func hasZero(answerLine []int) bool {
 	return false
 }
 
-func withoutEdgeCross(fn func(quizLine []int, answerLine []int) bool, quizLine []int, answerLine []int) (isChanged bool) {
-	// 左端、右端に✕が確定している場合、その分を除外して関数を実行する
-	// hasZeroで0が含まれていることは確認している
-	leftOffset := -1
-	rightOffset := -1
-	for i, v := range answerLine {
-		if v != -1 {
-			if leftOffset == -1 {
-				leftOffset = i
-			}
-			rightOffset = i + 1
-		}
-	}
+func SplitAnswerLine(answerLine []int) (result [][]int) {
+	var current []int
 
-	isChanged = isChanged || fn(quizLine, answerLine[leftOffset:rightOffset])
-
-	return
-}
-
-func solveLineFirst(quizLine []int, answerLine []int) (isChanged bool) {
-	maxLineLength := len(answerLine)
-
-	/// quizLineの最小の長さを計算
-	// 黒の数を数える
-	sum := 0
-	for _, v := range quizLine {
-		sum += v
-	}
-	// 黒の間の最小スペースを数える
-	sum += len(quizLine) - 1
-
-	// 最小の長さとラインの長さの差
-	lengthDiff := maxLineLength - sum
-	// ラインの塗りが確定してるか
-	isConfirmed := lengthDiff == 0
-	// 最小の塗りの長さはラインの長さを超えるはずがない
-	if lengthDiff < 0 {
-		panic("quizの横ラインの合計の長さが答えの横ラインの長さより大きい")
-	}
-
-	avoidLength := lengthDiff
-	blackLength := quizLine[0] - avoidLength
-	// index=0でblackLengthを取得したので、次取るindexは1になる
-	quizLineIndex := 1
-	for i := range answerLine {
-		// i番目の値
-		value := 0
-		if avoidLength > 0 {
-			// avoidLengthが残っている場合は、0になる(0なのでvalueは変わらない)
-			avoidLength--
-		} else if blackLength > 0 {
-			// blackLengthが残っている場合は、1になる
-			value = 1
-			blackLength--
-		} else {
-			// avoidLength、blackLengthの両方が0になったら、i番目は空白になる
-			// 確定している場合は-1を入れる
-			if isConfirmed {
-				value = -1
-			}
-			// 空白を入れたので、次のavoidLengthとblackLengthを更新する
-			if quizLineIndex < len(quizLine) {
-				avoidLength = lengthDiff
-				blackLength = quizLine[quizLineIndex] - avoidLength
-				quizLineIndex++
-			}
-		}
-		// 新しく変化があれば、更新してフラグを立てる
-		if answerLine[i] == 0 && value != 0 {
-			answerLine[i] = value
-			isChanged = true
-		}
-	}
-	return
-}
-
-func solveLineEdge(quizLine []int, answerLine []int) (isChanged bool) {
-	// 左端が黒の場合、quizLineの最初の値分だけ1にする
-	if answerLine[0] == 1 {
-		offset := quizLine[0]
-		for i := range answerLine {
-			if i >= offset {
-				if answerLine[i] == 0 {
-					answerLine[i] = -1
-					isChanged = true
-				}
-				break
-			}
-			if answerLine[i] == 0 {
-				answerLine[i] = 1
-				isChanged = true
-			}
-		}
-	}
-	// 右端が黒の場合、quizLineの最後の値分だけ1にする
-	if answerLine[len(answerLine)-1] == 1 {
-		offset := quizLine[len(quizLine)-1]
-		for i := len(answerLine) - 1; i >= 0; i-- {
-			if i <= len(answerLine)-1-offset {
-				if answerLine[i] == 0 {
-					answerLine[i] = -1
-					isChanged = true
-				}
-				break
-			}
-			if answerLine[i] == 0 {
-				answerLine[i] = 1
-				isChanged = true
-			}
-		}
-	}
-
-	return
-}
-
-func fillBrankInComplete(quizLine []int, answerLine []int) (isChanged bool) {
-	// answerLineが解き終わっているか確認する
-	var currentLine []int
-	valContinue := false
 	for _, v := range answerLine {
-		if v == 1 {
-			if valContinue {
-				currentLine[len(currentLine)-1] += 1
-			} else {
-				currentLine = append(currentLine, 1)
+		if v == -1 {
+			if len(current) > 0 {
+				result = append(result, current)
+				current = []int{}
 			}
+		} else {
+			current = append(current, v)
 		}
-		valContinue = v == 1
 	}
-	// currentLineが空の場合、[0]とする
-	if len(currentLine) == 0 {
-		currentLine = []int{0}
+	if len(current) > 0 {
+		result = append(result, current)
 	}
-	// まだ解き終わっていない場合は何もしない
-	if !reflect.DeepEqual(quizLine, currentLine) {
-		return
-	}
-	// 0を-1に変える
-	for i, v := range answerLine {
-		if v == 0 {
-			answerLine[i] = -1
-			isChanged = true
+
+	return result
+}
+
+func GenerateQuizPatterns(quizLine []int, splittedAnswerLines [][]int) [][][]QuizItem {
+	// 例: quizLine=[3,1,2], splittedAnswerLines=[[0,0,0,0,0,0,0,0]] の場合、以下のパターンのみとなる
+	// - [3,1,2] -> [[3,1,2]]
+	// 例: quizLine=[3,1,2], splittedAnswerLines=[[0,0,0,0,0],[0,0],[0,0]] の場合、以下のパターンが考えられる
+	// - [3,1,2] -> [[3], [1], [2]]
+	// - [3,1,2] -> [[3,1], [2], []]
+	// この場合、以下のような値を返す
+	// [][][]QuizItem {
+	//   {
+	//     {
+	//       QuizItem{index:0, value:3},
+	//       QuizItem{index:1, value:1},
+	//     },
+	//     {
+	//       QuizItem{index:2, value:2},
+	//     },
+	//     {},
+	//   },
+	//   {
+	//     {
+	//       QuizItem{index:0, value:3},
+	//     },
+	//     {
+	//       QuizItem{index:1, value:1},
+	//     },
+	//     {
+	//       QuizItem{index:2, value:2},
+	//     },
+	//   },
+	// }
+	// 上の場合は、3や1を1つずついれる場合は3、1それぞれの長さだけで入るが、2つ以上まとめて入れる場合は間のスペースの分も考慮する必要がある
+	// 例えば、[3,1]を[0,0,0,0,0]に入れる場合、[3,1]の間に1つスペースが必要なので、3+1+1=5となり、ちょうど入る
+
+	quizItemList := make([]QuizItem, len(quizLine))
+	for idx, value := range quizLine {
+		quizItemList[idx] = QuizItem{
+			index: idx,
+			value: value,
 		}
 	}
 
-	return
+	// TODO: 実装
+	return [][][]QuizItem{
+		{
+			{},
+		},
+	}
 }
