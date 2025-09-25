@@ -163,6 +163,12 @@ func GenerateQuizPatterns(quizLine []int, splittedAnswerLines [][]int) [][][]Qui
 			value: value,
 		}
 	}
+	for {
+		tempList := make([][]QuizItem, len(splittedAnswerLines))
+		tempList[0] = quizItemList
+
+		break
+	}
 
 	// TODO: 実装
 	return [][][]QuizItem{
