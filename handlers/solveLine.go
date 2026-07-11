@@ -10,78 +10,41 @@ type AnswerLine []schemas.CellType
 
 // quizLine: クイズの行 (例: [3, 1, 2])
 // answerLine: 解答の行 (例: [_, x, ◼, _, _, x, _])
-func (a AnswerLine) SolveLine(quizLine []int) (isChanged bool) {
+func (a AnswerLine) SolveLine(quizLine []int) bool {
 	if len(quizLine) == 0 {
 		panic("quizLineの長さが0")
 	}
 	// 解き終わっているなら何もしない
 	if a.isSolved() {
-		return
+		return false
 	}
 
-	// answerLineを-1でsplitして、0と1の塊に分ける(-1の連続は1つにまとめる)
+	if slices.Equal(quizLine, []int{0}) {
+		for i := range a {
+			a[i] = schemas.Unfilled
+		}
+		return true
+	}
+
+	// AnswerLineをUnfilled(x)で分割して、Unsettled(_)とFilled(◼)の塊に分ける
+	// Unfilledが連続しても1つ分のUnfilledとみなして分割する
+	// [_,_,◼,_,_,x,_,_,x,x,_,_,x] => [[_,_,◼,_,_],[_,_],[_,_]]
 	splittedAnswerLine := a.splitAnswerLine()
+	fmt.Println("splitAnswerLine", splittedAnswerLine)
 
 	// splittedAnswerLinesの各要素に、quizLineの要素をどう割り当てられるか、パターンを全探索する
-	quizPatterns := splittedAnswerLine.generateQuizPatterns(quizLine)
-	fmt.Println("splittedAnswerLines", splittedAnswerLine, "patterns:", quizPatterns)
+	quizItemPatterns := splittedAnswerLine.generateQuizPatterns(quizLine)
+	fmt.Println("generateQuizPatterns", quizItemPatterns)
 
-	itemRangeListPatterns := make([][]ItemRange, len(quizPatterns), len(splittedAnswerLine[0]))
-	for h, splitedQuiz := range quizPatterns {
-		for i := range splittedAnswerLine {
-			partQuiz := splitedQuiz[i]
-			answer := splittedAnswerLine[i]
-			itemRangeListPatterns[h] = make([]ItemRange, len(partQuiz))
+	// QuizLineの各数値がAnswerLineのどの範囲に入りうるかの全パターンを計算する
+	// そして、start, endを全パターンで比較して、最も広い範囲をitemRangeとする
+	maxItemRangeList := quizItemPatterns.calculateItemRangeListPatterns(len(quizLine), splittedAnswerLine)
+	fmt.Println("calculateItemRangeListPatterns", maxItemRangeList)
 
-			for j, quizItem := range partQuiz {
-				// quizItem以外の、左のvalueの合計+item数-1、右のvalueの合計+item数-1を、左右から引いて、quizItemの入りうる位置を特定する
-				leftMin := 0
-				for k := 0; k < j; k++ {
-					leftMin += partQuiz[k].value + 1
-				}
-				rightMin := 0
-				for k := j + 1; k < len(partQuiz); k++ {
-					rightMin += partQuiz[k].value + 1
-				}
-
-				// TODO: answerの値をintからQuizItemにして、indexとvalueが同じQuizItemの場合はその黒から届く範囲がitemRangeとする
-				itemRangeListPatterns[h][j] = ItemRange{
-					start: leftMin,
-					end:   len(answer) - 1 - rightMin,
-					item:  quizItem,
-				}
-			}
-		}
-	}
-	// start, endを全パターンで比較して、最も広い範囲をitemRangeとする
-	maxItemRangeList := make([]ItemRange, len(quizLine))
-	for _, itemRangeList := range itemRangeListPatterns {
-		for i, itemRange := range itemRangeList {
-			if itemRange.start < maxItemRangeList[i].start {
-				maxItemRangeList[i].start = itemRange.start
-			}
-			if itemRange.end > maxItemRangeList[i].end {
-				maxItemRangeList[i].end = itemRange.end
-			}
-		}
-	}
 	// maxItemRangeの長さが、itemの長さの2倍未満の場合、itemRangeの中央部分は必ず黒になるので、answerLineを更新する
-	for _, maxItemRange := range maxItemRangeList {
-		itemRangeLength := maxItemRange.Length()
-		if itemRangeLength < maxItemRange.item.value*2 {
-			// itemRangeの長さが、itemの長さの2倍未満の場合、itemRangeの中央部分は必ず黒になる
-			midStart := maxItemRange.end - maxItemRange.item.value
-			midEnd := maxItemRange.start + maxItemRange.item.value - 1
-			for k := midStart; k <= midEnd; k++ {
-				if a[k] != schemas.Filled {
-					a[k] = schemas.Filled
-					isChanged = true
-				}
-			}
-		}
-	}
+	isCenterOverlapChanged := maxItemRangeList.fillCenterOverlap(a)
 
-	return
+	return isCenterOverlapChanged
 }
 
 func (a AnswerLine) isSolved() bool {
@@ -118,71 +81,184 @@ func (a AnswerLine) splitAnswerLine() SplittedAnswerLine {
 	return result
 }
 
-type QuizItem struct {
+// QuizLineの数字一つ分のデータ
+type QuizLineItem struct {
+	// QuizLine内のindex
 	index int
+	// QuizLine内の数値
 	value int
 }
-type ItemRange struct {
-	start int // itemの左端が入りうる開始位置(全域の場合0が入る)
-	end   int // itemの右端が入りうる終了位置(全域の場合len(answerLine)-1が入る)
-	item  QuizItem
-}
 
-func (ir ItemRange) Length() int {
-	return ir.end - ir.start + 1
-}
+// SplittedAnswerLineにQuizLineのItemをどう置くかというパターンの一部分
+// Lengthは、最大でQuizLineの長さ、最小は0
+type QuizItemAllocationInPart []QuizLineItem
 
-func (sal SplittedAnswerLine) generateQuizPatterns(quizLine []int) [][][]QuizItem {
+// SplittedAnswerLineにQuizLineのItemをどう置くかというパターン
+// 常にSplittedAnswerLineの長さと一致する
+type QuizItemAllocationPattern []QuizItemAllocationInPart
+
+// 上のパターンのリスト
+type QuizItemAllocationPatterns []QuizItemAllocationPattern
+
+func (sal SplittedAnswerLine) generateQuizPatterns(quizLine []int) QuizItemAllocationPatterns {
 	// 例: quizLine=[3,1,2], splittedAnswerLines=[[_,_,_,_,_,_,_,_]] の場合、以下のパターンのみとなる
 	// - [3,1,2] -> [[3,1,2]]
 	// 例: quizLine=[3,1,2], splittedAnswerLines=[[_,_,_,_,_],[_,_],[_,_]] の場合、以下のパターンが考えられる
 	// - [3,1,2] -> [[3], [1], [2]]
 	// - [3,1,2] -> [[3,1], [2], []]
 	// この場合、以下のような値を返す
-	// [][][]QuizItem {
-	//   {
-	//     {
-	//       QuizItem{index:0, value:3},
-	//       QuizItem{index:1, value:1},
+	// QuizItemPatterns {
+	//   QuizItemAllocationPattern {
+	//     QuizItemAllocationInPart {
+	//       QuizLineItem{index:0, value:3},
+	//       QuizLineItem{index:1, value:1},
 	//     },
-	//     {
-	//       QuizItem{index:2, value:2},
+	//     QuizItemAllocationInPart {
+	//       QuizLineItem{index:2, value:2},
 	//     },
 	//     {},
 	//   },
-	//   {
-	//     {
-	//       QuizItem{index:0, value:3},
+	//   QuizItemAllocationPattern {
+	//     QuizItemAllocationInPart {
+	//       QuizLineItem{index:0, value:3},
 	//     },
-	//     {
-	//       QuizItem{index:1, value:1},
+	//     QuizItemAllocationInPart {
+	//       QuizLineItem{index:1, value:1},
 	//     },
-	//     {
-	//       QuizItem{index:2, value:2},
+	//     QuizItemAllocationInPart {
+	//       QuizLineItem{index:2, value:2},
 	//     },
 	//   },
 	// }
 	// 上の場合は、3や1を1つずついれる場合は3、1それぞれの長さだけで入るが、2つ以上まとめて入れる場合は間のスペースの分も考慮する必要がある
 	// 例えば、[3,1]を[_,_,_,_,_]に入れる場合、[3,1]の間に1つスペースが必要なので、3+1+1=5となり、ちょうど入る
 
-	quizItemList := make([]QuizItem, len(quizLine))
-	for idx, value := range quizLine {
-		quizItemList[idx] = QuizItem{
-			index: idx,
-			value: value,
+	// TODO: まだ仮実装
+	quizItemAllocationInPart := make(QuizItemAllocationInPart, len(quizLine))
+	for i, item := range quizLine {
+		quizItemAllocationInPart[i] = QuizLineItem{
+			index: i,
+			value: item,
 		}
 	}
-	for {
-		tempList := make([][]QuizItem, len(sal))
-		tempList[0] = quizItemList
+	return QuizItemAllocationPatterns{QuizItemAllocationPattern{quizItemAllocationInPart}}
+}
 
-		break
-	}
+// QuizLineの数値1個分がAnswerLineのうちのどの範囲に入りうるか
+type ItemRange struct {
+	// itemの左端が入りうる開始位置(全域の場合0が入る)
+	start int
+	// itemの右端が入りうる終了位置(全域の場合len(answerLine)-1が入る)
+	end  int
+	item QuizLineItem
+}
 
-	// TODO: 実装
-	return [][][]QuizItem{
-		{
-			{},
-		},
+func (ir ItemRange) Length() int {
+	return ir.end - ir.start + 1
+}
+
+// ItemRangeのQuizLine一列分
+// 長さはQuizLineと一致する
+type ItemRangeList []ItemRange
+
+// ItemRangeListの全パターン分
+// QuizItemAllocationPatternsと長さは一致する
+// 最終的に全パターンを畳み込んで、一番広い範囲のItemRangeListに変換される
+type ItemRangeListPatterns []ItemRangeList
+
+// QuizLineの各数値がAnswerLineのどの範囲に入りうるかの全パターンを計算する
+// そしてその各パターンから、各QuizLineItemの取りうる最大の範囲を計算する
+func (qiap QuizItemAllocationPatterns) calculateItemRangeListPatterns(quizLineLength int, splittedAnswerLine SplittedAnswerLine) ItemRangeList {
+	// 各QuizLineItemの割り振りパターンでのQuizLineItemの各入りうる範囲
+	itemRangeListPatterns := make(ItemRangeListPatterns, len(qiap))
+
+	// QuizLineItemの割り振りパターンでforを回す
+	for h, itemAllocationPattern := range qiap {
+		itemRangeList := make(ItemRangeList, 0, quizLineLength)
+		offset := 0
+		// その中で、splitされた一箇所の、QuizLineItemとAnswerの値を取り出す
+		for i := range splittedAnswerLine {
+			// TODO: answerにFilledがあって取りうる範囲が変わるケースにも対応する
+
+			// QuizLineの一部分。構造体なので、全体のQuizLineの何番目かのindexも取れる
+			// [3,1,2]
+			partQuizLineItem := itemAllocationPattern[i]
+			// AnswerLineの一部分
+			// [_,_,◼,_,_,_,_,_,_]
+			answer := splittedAnswerLine[i]
+
+			// QuizLineの数値ひとつに注目
+			for j, quizItem := range partQuizLineItem {
+				// この周回のquizItemを除いた、左側の数値の合計+余白マス数分startをずらし、右側の数値の合計+余白マス数分endをずらして、範囲を計算する
+				start := 0
+				for k := range j {
+					start += partQuizLineItem[k].value + 1
+				}
+				end := len(answer) - 1
+				for k := j + 1; k < len(partQuizLineItem); k++ {
+					end -= partQuizLineItem[k].value + 1
+				}
+
+				itemRangeList = append(itemRangeList, ItemRange{
+					start: offset + start,
+					end:   offset + end,
+					item:  quizItem,
+				})
+			}
+
+			// 次の周回で、これまでのsplitのマス数を把握するためoffsetに加算
+			offset += len(answer)
+		}
+		// 1パターン分できたのでpush
+		itemRangeListPatterns[h] = itemRangeList
 	}
+	fmt.Println("itemRangeListPatterns", itemRangeListPatterns)
+
+	maxItemRangeList := make(ItemRangeList, quizLineLength)
+	// 各パターンを回し、各QuizLineItemの入りうる範囲の一番広い範囲を計算する
+	for h, itemRangeList := range itemRangeListPatterns {
+		for i, itemRange := range itemRangeList {
+			if h == 0 {
+				maxItemRangeList[i] = itemRange
+			} else {
+				maxItemRangeList[i].start = min(itemRange.start, maxItemRangeList[i].start)
+				maxItemRangeList[i].end = max(itemRange.end, maxItemRangeList[i].end)
+			}
+		}
+	}
+	return maxItemRangeList
+}
+
+func (irl ItemRangeList) fillCenterOverlap(answerLine AnswerLine) bool {
+	isChanged := false
+	for _, itemRange := range irl {
+		// itemRangeの長さが、itemの長さの2倍未満の場合、itemRangeの中央部分は必ず黒になる
+		itemRangeLength := itemRange.Length()
+
+		// 例) 2..6の5マスの間に、3を塗る際は、index=4の真ん中1マスだけを塗る
+		unsettleLength := itemRangeLength - itemRange.item.value
+		midStart := itemRange.start + unsettleLength
+		midEnd := itemRange.end - unsettleLength
+		if midStart <= midEnd {
+			for k := midStart; k <= midEnd; k++ {
+				if answerLine[k] == schemas.Unsettled {
+					answerLine[k] = schemas.Filled
+					isChanged = true
+				}
+				if answerLine[k] == schemas.Unfilled {
+					panic("ロジックミス")
+				}
+			}
+		}
+		// 範囲の長さと数値が一致している場合は左右にUnfilledを塗る
+		if unsettleLength == 0 {
+			if midStart > 0 {
+				answerLine[midStart-1] = schemas.Unfilled
+			}
+			if midEnd < len(answerLine)-1 {
+				answerLine[midEnd+1] = schemas.Unfilled
+			}
+		}
+	}
+	return isChanged
 }

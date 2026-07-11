@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"fmt"
 	"picross/schemas"
+	"time"
 )
 
 // ピクロスの問題の構造体を受け取り、回答の配列に値を入れていく
@@ -27,6 +29,10 @@ func SolveQuiz(quiz schemas.Quiz, answer *schemas.Answer) bool {
 				answer.WriteLine(currentOrientation, lineIndex, answerLine)
 				isChanged = true
 			}
+			// debug
+			fmt.Println("orientation", currentOrientation, "index", lineIndex, "quizLine", quizLine, "answerLine", answerLine)
+			fmt.Println()
+			time.Sleep(100 * time.Millisecond)
 		}
 
 		// 変化がなければ、見てる向きのラインが全て終わったとする
@@ -42,7 +48,7 @@ func SolveQuiz(quiz schemas.Quiz, answer *schemas.Answer) bool {
 			break
 		}
 
-		switchOrientation(currentOrientation)
+		currentOrientation = switchOrientation(currentOrientation)
 	}
 
 	return answer.IsSolved()

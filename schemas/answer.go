@@ -1,5 +1,7 @@
 package schemas
 
+import "fmt"
+
 type CellType int
 
 const (
@@ -20,12 +22,18 @@ func (c CellType) String() string {
 	case Unfilled:
 		return "x"
 	default:
-		return ""
+		panic("存在しないCellTypeです")
 	}
 }
 
 type Answer struct {
 	cells [][]CellType
+}
+
+func (a Answer) Log() {
+	for _, line := range a.cells {
+		fmt.Println(line)
+	}
 }
 
 func (a *Answer) Initialize(horizontalLength, verticalLength int) {

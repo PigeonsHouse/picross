@@ -18,7 +18,6 @@ func main() {
 	inputPath := args[0]
 
 	quiz, ans := handlers.ReadQuiz(inputPath)
-	fmt.Println(ans)
 	if isSolved := handlers.SolveQuiz(quiz, &ans); isSolved {
 		handlers.DrawAnswerImage(ans, *outputPath)
 	} else {
