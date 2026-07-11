@@ -1,18 +1,39 @@
 package handlers
 
 import (
+	"picross/schemas"
 	"reflect"
 	"testing"
 )
 
 func TestSplitAnswerLine(t *testing.T) {
-	answerLine := []int{1, 0, 0, 0, -1, 0, 1, 0, 0}
-	expected := [][]int{
-		{1, 0, 0, 0},
-		{0, 1, 0, 0},
+	var answerLine AnswerLine = []schemas.CellType{
+		schemas.Filled,
+		schemas.Unsettled,
+		schemas.Unsettled,
+		schemas.Unsettled,
+		schemas.Unfilled,
+		schemas.Unsettled,
+		schemas.Filled,
+		schemas.Unsettled,
+		schemas.Unsettled,
+	}
+	expected := [][]schemas.CellType{
+		{
+			schemas.Filled,
+			schemas.Unsettled,
+			schemas.Unsettled,
+			schemas.Unsettled,
+		},
+		{
+			schemas.Unsettled,
+			schemas.Filled,
+			schemas.Unsettled,
+			schemas.Unsettled,
+		},
 	}
 
-	splittedAnswerLine := SplitAnswerLine(answerLine)
+	splittedAnswerLine := answerLine.splitAnswerLine()
 
 	if !reflect.DeepEqual(splittedAnswerLine, expected) {
 		t.Error()

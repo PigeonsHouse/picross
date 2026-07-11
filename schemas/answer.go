@@ -1,56 +1,89 @@
 package schemas
 
-type Answer struct {
-	data [][]int
-}
+type CellType int
 
-func (a *Answer) InitData(horizontalLength, verticalLength int) {
-	a.data = make([][]int, verticalLength)
-	for i := range a.data {
-		a.data[i] = make([]int, horizontalLength)
+const (
+	// 未確定(_)
+	Unsettled CellType = iota
+	// 塗りつぶし(◼)
+	Filled
+	// 空白(x)
+	Unfilled
+)
+
+func (c CellType) String() string {
+	switch c {
+	case Unsettled:
+		return "_"
+	case Filled:
+		return "◼"
+	case Unfilled:
+		return "x"
+	default:
+		return ""
 	}
 }
-func (a Answer) GetData() [][]int {
-	return a.data
+
+type Answer struct {
+	cells [][]CellType
 }
 
-func (a Answer) CopyLine(isHorizontal bool, idx int, line *[]int) {
-	*line = make([]int, a.GetLength(isHorizontal))
-	if isHorizontal {
-		copy(*line, a.data[idx])
-	} else {
-		for i, horizontalLine := range a.data {
-			(*line)[i] = horizontalLine[idx]
+func (a *Answer) Initialize(horizontalLength, verticalLength int) {
+	a.cells = make([][]CellType, verticalLength)
+	for i := range a.cells {
+		a.cells[i] = make([]CellType, horizontalLength)
+	}
+}
+
+func (a Answer) Map(callback func(x, y int, cell CellType)) {
+	for y, inner := range a.cells {
+		for x, data := range inner {
+			callback(x, y, data)
 		}
 	}
 }
-func (a *Answer) SaveLine(isHorizontal bool, idx int, line []int) {
-	if len(line) != a.GetLength(isHorizontal) {
+
+func (a Answer) ReadLine(orientation Orientation, idx int) []CellType {
+	line := make([]CellType, a.GetLength(orientation))
+	if orientation == Horizontal {
+		copy(line, a.cells[idx])
+	} else {
+		for i, horizontalLine := range a.cells {
+			(line)[i] = horizontalLine[idx]
+		}
+	}
+	return line
+}
+
+func (a *Answer) WriteLine(orientation Orientation, idx int, line []CellType) {
+	if len(line) != a.GetLength(orientation) {
 		return
 	}
-	if isHorizontal {
-		copy(a.data[idx], line)
+	if orientation == Horizontal {
+		copy(a.cells[idx], line)
 	} else {
-		for i, v := range line {
-			a.data[i][idx] = v
+		for i, cell := range line {
+			a.cells[i][idx] = cell
 		}
 	}
 }
-func (a Answer) GetLength(isHorizontal bool) int {
-	if isHorizontal {
-		return len(a.data[0])
+
+func (a Answer) GetLength(orientation Orientation) int {
+	if orientation == Horizontal {
+		return len(a.cells[0])
 	} else {
-		return len(a.data)
+		return len(a.cells)
 	}
 }
 
 func (a Answer) IsSolved() bool {
-	for _, line := range a.data {
-		for _, cell := range line {
-			if cell == 0 {
-				return false
-			}
+	isSolved := true
+
+	a.Map(func(_, _ int, cell CellType) {
+		if cell == Unsettled {
+			isSolved = false
 		}
-	}
-	return true
+	})
+
+	return isSolved
 }

@@ -1,45 +1,36 @@
 package handlers
 
-import "fmt"
+import (
+	"fmt"
+	"picross/schemas"
+	"slices"
+)
 
-type QuizItem struct {
-	index int
-	value int
-}
-
-type ItemRange struct {
-	start int // itemの左端が入りうる開始位置(全域の場合0が入る)
-	end   int // itemの右端が入りうる終了位置(全域の場合len(answerLine)-1が入る)
-	item  QuizItem
-}
-
-func (ir ItemRange) Length() int {
-	return ir.end - ir.start + 1
-}
+type AnswerLine []schemas.CellType
 
 // quizLine: クイズの行 (例: [3, 1, 2])
-// answerLine: 解答の行 (例: [0, -1, 1, 0, 0, -1, 0])
-func SolveLine(quizLine []int, answerLine []int) (isChanged bool) {
+// answerLine: 解答の行 (例: [_, x, ◼, _, _, x, _])
+func (a AnswerLine) SolveLine(quizLine []int) (isChanged bool) {
 	if len(quizLine) == 0 {
 		panic("quizLineの長さが0")
 	}
-	// answerLineに0が含まれていない場合は、解き終わっているので何もしない
-	if !hasZero(answerLine) {
+	// 解き終わっているなら何もしない
+	if a.isSolved() {
 		return
 	}
 
 	// answerLineを-1でsplitして、0と1の塊に分ける(-1の連続は1つにまとめる)
-	splittedAnswerLines := SplitAnswerLine(answerLine)
+	splittedAnswerLine := a.splitAnswerLine()
 
 	// splittedAnswerLinesの各要素に、quizLineの要素をどう割り当てられるか、パターンを全探索する
-	quizPatterns := GenerateQuizPatterns(quizLine, splittedAnswerLines)
-	fmt.Println("splittedAnswerLines", splittedAnswerLines, "patterns:", quizPatterns)
+	quizPatterns := splittedAnswerLine.generateQuizPatterns(quizLine)
+	fmt.Println("splittedAnswerLines", splittedAnswerLine, "patterns:", quizPatterns)
 
-	itemRangeListPatterns := make([][]ItemRange, len(quizPatterns), len(splittedAnswerLines[0]))
+	itemRangeListPatterns := make([][]ItemRange, len(quizPatterns), len(splittedAnswerLine[0]))
 	for h, splitedQuiz := range quizPatterns {
-		for i := range splittedAnswerLines {
+		for i := range splittedAnswerLine {
 			partQuiz := splitedQuiz[i]
-			answer := splittedAnswerLines[i]
+			answer := splittedAnswerLine[i]
 			itemRangeListPatterns[h] = make([]ItemRange, len(partQuiz))
 
 			for j, quizItem := range partQuiz {
@@ -54,7 +45,6 @@ func SolveLine(quizLine []int, answerLine []int) (isChanged bool) {
 				}
 
 				// TODO: answerの値をintからQuizItemにして、indexとvalueが同じQuizItemの場合はその黒から届く範囲がitemRangeとする
-
 				itemRangeListPatterns[h][j] = ItemRange{
 					start: leftMin,
 					end:   len(answer) - 1 - rightMin,
@@ -83,8 +73,8 @@ func SolveLine(quizLine []int, answerLine []int) (isChanged bool) {
 			midStart := maxItemRange.end - maxItemRange.item.value
 			midEnd := maxItemRange.start + maxItemRange.item.value - 1
 			for k := midStart; k <= midEnd; k++ {
-				if answerLine[k] != 1 {
-					answerLine[k] = 1
+				if a[k] != schemas.Filled {
+					a[k] = schemas.Filled
 					isChanged = true
 				}
 			}
@@ -94,39 +84,58 @@ func SolveLine(quizLine []int, answerLine []int) (isChanged bool) {
 	return
 }
 
-func hasZero(answerLine []int) bool {
-	for _, v := range answerLine {
-		if v == 0 {
-			return true
-		}
-	}
-	return false
+func (a AnswerLine) isSolved() bool {
+	return !slices.Contains(a, schemas.Unsettled)
 }
 
-func SplitAnswerLine(answerLine []int) (result [][]int) {
-	var current []int
+// AnswerLineをUnfilled(x)で分割した一部分
+// Unsettled(_)とFilled(◼)だけが含まれている
+type SplittedAnswerLinePart []schemas.CellType
 
-	for _, v := range answerLine {
-		if v == -1 {
-			if len(current) > 0 {
-				result = append(result, current)
-				current = []int{}
+// AnswerLineをUnfilled(x)で分割したデータ
+// 例えばUnfilledのないAnswerLineはlength=1になる
+type SplittedAnswerLine []SplittedAnswerLinePart
+
+// AnswerLineをUnfilled(x)で分割する
+func (a AnswerLine) splitAnswerLine() SplittedAnswerLine {
+	result := SplittedAnswerLine{}
+	currentPart := SplittedAnswerLinePart{}
+
+	for _, cell := range a {
+		if cell == schemas.Unfilled {
+			if len(currentPart) > 0 {
+				result = append(result, currentPart)
+				currentPart = SplittedAnswerLinePart{}
 			}
 		} else {
-			current = append(current, v)
+			currentPart = append(currentPart, cell)
 		}
 	}
-	if len(current) > 0 {
-		result = append(result, current)
+	if len(currentPart) > 0 {
+		result = append(result, currentPart)
 	}
 
 	return result
 }
 
-func GenerateQuizPatterns(quizLine []int, splittedAnswerLines [][]int) [][][]QuizItem {
-	// 例: quizLine=[3,1,2], splittedAnswerLines=[[0,0,0,0,0,0,0,0]] の場合、以下のパターンのみとなる
+type QuizItem struct {
+	index int
+	value int
+}
+type ItemRange struct {
+	start int // itemの左端が入りうる開始位置(全域の場合0が入る)
+	end   int // itemの右端が入りうる終了位置(全域の場合len(answerLine)-1が入る)
+	item  QuizItem
+}
+
+func (ir ItemRange) Length() int {
+	return ir.end - ir.start + 1
+}
+
+func (sal SplittedAnswerLine) generateQuizPatterns(quizLine []int) [][][]QuizItem {
+	// 例: quizLine=[3,1,2], splittedAnswerLines=[[_,_,_,_,_,_,_,_]] の場合、以下のパターンのみとなる
 	// - [3,1,2] -> [[3,1,2]]
-	// 例: quizLine=[3,1,2], splittedAnswerLines=[[0,0,0,0,0],[0,0],[0,0]] の場合、以下のパターンが考えられる
+	// 例: quizLine=[3,1,2], splittedAnswerLines=[[_,_,_,_,_],[_,_],[_,_]] の場合、以下のパターンが考えられる
 	// - [3,1,2] -> [[3], [1], [2]]
 	// - [3,1,2] -> [[3,1], [2], []]
 	// この場合、以下のような値を返す
@@ -154,7 +163,7 @@ func GenerateQuizPatterns(quizLine []int, splittedAnswerLines [][]int) [][][]Qui
 	//   },
 	// }
 	// 上の場合は、3や1を1つずついれる場合は3、1それぞれの長さだけで入るが、2つ以上まとめて入れる場合は間のスペースの分も考慮する必要がある
-	// 例えば、[3,1]を[0,0,0,0,0]に入れる場合、[3,1]の間に1つスペースが必要なので、3+1+1=5となり、ちょうど入る
+	// 例えば、[3,1]を[_,_,_,_,_]に入れる場合、[3,1]の間に1つスペースが必要なので、3+1+1=5となり、ちょうど入る
 
 	quizItemList := make([]QuizItem, len(quizLine))
 	for idx, value := range quizLine {
@@ -164,7 +173,7 @@ func GenerateQuizPatterns(quizLine []int, splittedAnswerLines [][]int) [][][]Qui
 		}
 	}
 	for {
-		tempList := make([][]QuizItem, len(splittedAnswerLines))
+		tempList := make([][]QuizItem, len(sal))
 		tempList[0] = quizItemList
 
 		break

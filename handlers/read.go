@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"piclos/schemas"
+	"picross/schemas"
 )
 
 // ピクロスの問題ファイルを受け取り、データをパースして、問題のサイズにあった回答用の配列を作成する
@@ -16,9 +16,7 @@ func ReadQuiz(fileName string) (quiz schemas.Quiz, answer schemas.Answer) {
 	}
 	json.Unmarshal(raw, &quiz)
 
-	hor := len(quiz.Horizontal)
-	ver := len(quiz.Vertical)
-	answer.InitData(hor, ver)
+	answer.Initialize(quiz.GetSize())
 
 	return
 }

@@ -7,18 +7,29 @@ import (
 	"image/draw"
 	"image/png"
 	"os"
-	"piclos/schemas"
+	"picross/schemas"
+)
+
+const (
+	marginX        = 40
+	marginTop      = 120
+	marginBottom   = 30
+	boxWidth       = 30
+	boxBorderWidth = 2
+)
+
+var (
+	backgroundColor = color.White
+	borderColor     = color.Black
+	filledColor     = color.RGBA{32, 32, 32, 255}
+	blankColor      = color.RGBA{200, 200, 200, 255}
+	unsettledColor  = color.White
 )
 
 // 回答用の配列を見て、指定されたパスに回答のイラストを出力する
 func DrawAnswerImage(answer schemas.Answer, outputPath string) {
-	marginX := 40
-	marginTop := 120
-	marginBottom := 30
-	boxWidth := 30
-	boxBorderWidth := 2
-	horizontalCellNumber := answer.GetLength(true)
-	verticalCellNumber := answer.GetLength(false)
+	horizontalCellNumber := answer.GetLength(schemas.Horizontal)
+	verticalCellNumber := answer.GetLength(schemas.Vertical)
 
 	// 大元の画像を作成
 	img := image.NewRGBA(
@@ -30,7 +41,7 @@ func DrawAnswerImage(answer schemas.Answer, outputPath string) {
 		),
 	)
 	// 白で塗りつぶす
-	draw.Draw(img, img.Bounds(), &image.Uniform{color.White}, image.Point{0, 0}, draw.Src)
+	draw.Draw(img, img.Bounds(), &image.Uniform{backgroundColor}, image.Point{0, 0}, draw.Src)
 	// 回答を描画する矩形を黒で塗りつぶす
 	draw.Draw(
 		img,
@@ -40,37 +51,34 @@ func DrawAnswerImage(answer schemas.Answer, outputPath string) {
 			marginX+(boxBorderWidth+boxWidth)*horizontalCellNumber+boxBorderWidth,
 			marginTop+(boxBorderWidth+boxWidth)*verticalCellNumber+boxBorderWidth,
 		),
-		&image.Uniform{color.Black},
+		&image.Uniform{borderColor},
 		image.Point{0, 0}, draw.Src,
 	)
 
-	for y, inner := range answer.GetData() {
-		for x, data := range inner {
-			// マスの中身に応じて色を変える
-			// 1: 黒、-1: 灰色、0: 白
-			var fillColor color.Color
-			if data == 1 {
-				fillColor = color.RGBA{32, 32, 32, 255}
-			} else if data == -1 {
-				fillColor = color.RGBA{200, 200, 200, 255}
-			} else {
-				fillColor = color.White
-			}
-			// マスを描画
-			draw.Draw(
-				img,
-				image.Rect(
-					marginX+boxBorderWidth+(boxWidth+boxBorderWidth)*x,
-					marginTop+boxBorderWidth+(boxWidth+boxBorderWidth)*y,
-					marginX+(boxBorderWidth+boxWidth)*(x+1),
-					marginTop+(boxBorderWidth+boxWidth)*(y+1),
-				),
-				&image.Uniform{fillColor},
-				image.Point{0, 0},
-				draw.Src,
-			)
+	answer.Map(func(x, y int, data schemas.CellType) {
+		var cellColor color.Color
+		switch data {
+		case schemas.Filled:
+			cellColor = filledColor
+		case schemas.Unfilled:
+			cellColor = blankColor
+		case schemas.Unsettled:
+			cellColor = unsettledColor
 		}
-	}
+		// マスを描画
+		draw.Draw(
+			img,
+			image.Rect(
+				marginX+boxBorderWidth+(boxWidth+boxBorderWidth)*x,
+				marginTop+boxBorderWidth+(boxWidth+boxBorderWidth)*y,
+				marginX+(boxBorderWidth+boxWidth)*(x+1),
+				marginTop+(boxBorderWidth+boxWidth)*(y+1),
+			),
+			&image.Uniform{cellColor},
+			image.Point{0, 0},
+			draw.Src,
+		)
+	})
 
 	// 既にファイルが存在している場合は削除する
 	if _, err := os.Stat(outputPath); err == nil {
