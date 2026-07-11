@@ -23,6 +23,7 @@ func SolveQuiz(quiz schemas.Quiz, answer *schemas.Answer) bool {
 			// 問題のラインと回答用のラインを取得
 			quizLine := quiz.ReadLine(currentOrientation, lineIndex)
 			var answerLine AnswerLine = answer.ReadLine(currentOrientation, lineIndex)
+			fmt.Println("[start] orientation", currentOrientation, "index", lineIndex, "quizLine", quizLine, "answerLine", answerLine)
 
 			// 変化があった場合は、answerに保存する
 			if isChangedLine := answerLine.SolveLine(quizLine); isChangedLine {
@@ -30,7 +31,7 @@ func SolveQuiz(quiz schemas.Quiz, answer *schemas.Answer) bool {
 				isChanged = true
 			}
 			// debug
-			fmt.Println("orientation", currentOrientation, "index", lineIndex, "quizLine", quizLine, "answerLine", answerLine)
+			fmt.Println("[end] orientation", currentOrientation, "index", lineIndex, "quizLine", quizLine, "answerLine", answerLine)
 			fmt.Println()
 			time.Sleep(100 * time.Millisecond)
 		}

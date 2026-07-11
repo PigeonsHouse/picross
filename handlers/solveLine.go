@@ -19,12 +19,7 @@ func (a AnswerLine) SolveLine(quizLine []int) bool {
 		return false
 	}
 
-	if slices.Equal(quizLine, []int{0}) {
-		for i := range a {
-			a[i] = schemas.Unfilled
-		}
-		return true
-	}
+	isAutoUnfilledBeforeChanged := a.autoUnfilled(quizLine)
 
 	// AnswerLineをUnfilled(x)で分割して、Unsettled(_)とFilled(◼)の塊に分ける
 	// Unfilledが連続しても1つ分のUnfilledとみなして分割する
@@ -44,16 +39,46 @@ func (a AnswerLine) SolveLine(quizLine []int) bool {
 	// maxItemRangeの長さが、itemの長さの2倍未満の場合、itemRangeの中央部分は必ず黒になるので、answerLineを更新する
 	isCenterOverlapChanged := maxItemRangeList.fillCenterOverlap(a)
 
-	return isCenterOverlapChanged
+	isAutoUnfilledAfterChanged := a.autoUnfilled(quizLine)
+
+	return isCenterOverlapChanged || isAutoUnfilledBeforeChanged || isAutoUnfilledAfterChanged
 }
 
 func (a AnswerLine) isSolved() bool {
 	return !slices.Contains(a, schemas.Unsettled)
 }
 
+func (a AnswerLine) autoUnfilled(quizLine []int) bool {
+	isChanged := false
+	quizFilledCount := 0
+	answerFilledCount := 0
+	for _, quizItem := range quizLine {
+		quizFilledCount += quizItem
+	}
+	for _, cell := range a {
+		if cell == schemas.Filled {
+			answerFilledCount += 1
+		}
+	}
+	if quizFilledCount == answerFilledCount {
+		for i := range a {
+			if a[i] == schemas.Unsettled {
+				a[i] = schemas.Unfilled
+				isChanged = true
+			}
+		}
+	}
+	return isChanged
+}
+
 // AnswerLineをUnfilled(x)で分割した一部分
 // Unsettled(_)とFilled(◼)だけが含まれている
-type SplittedAnswerLinePart []schemas.CellType
+// Unfilledを無視する関係で、startとendを保持している
+type SplittedAnswerLinePart struct {
+	start int
+	end   int
+	cells []schemas.CellType
+}
 
 // AnswerLineをUnfilled(x)で分割したデータ
 // 例えばUnfilledのないAnswerLineはlength=1になる
@@ -64,17 +89,19 @@ func (a AnswerLine) splitAnswerLine() SplittedAnswerLine {
 	result := SplittedAnswerLine{}
 	currentPart := SplittedAnswerLinePart{}
 
-	for _, cell := range a {
+	for i, cell := range a {
 		if cell == schemas.Unfilled {
-			if len(currentPart) > 0 {
+			if len(currentPart.cells) > 0 {
 				result = append(result, currentPart)
 				currentPart = SplittedAnswerLinePart{}
 			}
+			currentPart.start = i + 1
 		} else {
-			currentPart = append(currentPart, cell)
+			currentPart.cells = append(currentPart.cells, cell)
+			currentPart.end = i
 		}
 	}
-	if len(currentPart) > 0 {
+	if len(currentPart.cells) > 0 {
 		result = append(result, currentPart)
 	}
 
@@ -101,9 +128,9 @@ type QuizItemAllocationPattern []QuizItemAllocationInPart
 type QuizItemAllocationPatterns []QuizItemAllocationPattern
 
 func (sal SplittedAnswerLine) generateQuizPatterns(quizLine []int) QuizItemAllocationPatterns {
-	// 例: quizLine=[3,1,2], splittedAnswerLines=[[_,_,_,_,_,_,_,_]] の場合、以下のパターンのみとなる
+	// 例: quizLine=[3,1,2], sal=[[_,_,_,_,_,_,_,_]] の場合、以下のパターンのみとなる
 	// - [3,1,2] -> [[3,1,2]]
-	// 例: quizLine=[3,1,2], splittedAnswerLines=[[_,_,_,_,_],[_,_],[_,_]] の場合、以下のパターンが考えられる
+	// 例: quizLine=[3,1,2], sal=[[_,_,_,_,_],[_,_],[_,_]] の場合、以下のパターンが考えられる
 	// - [3,1,2] -> [[3], [1], [2]]
 	// - [3,1,2] -> [[3,1], [2], []]
 	// この場合、以下のような値を返す
@@ -133,15 +160,42 @@ func (sal SplittedAnswerLine) generateQuizPatterns(quizLine []int) QuizItemAlloc
 	// 上の場合は、3や1を1つずついれる場合は3、1それぞれの長さだけで入るが、2つ以上まとめて入れる場合は間のスペースの分も考慮する必要がある
 	// 例えば、[3,1]を[_,_,_,_,_]に入れる場合、[3,1]の間に1つスペースが必要なので、3+1+1=5となり、ちょうど入る
 
-	// TODO: まだ仮実装
-	quizItemAllocationInPart := make(QuizItemAllocationInPart, len(quizLine))
-	for i, item := range quizLine {
-		quizItemAllocationInPart[i] = QuizLineItem{
-			index: i,
-			value: item,
+	quizItemAllocationPattern := make(QuizItemAllocationPattern, len(sal))
+	workingQuizLine := make([]int, len(quizLine))
+	copy(workingQuizLine, quizLine)
+	// lengthList := make([]int, len(sal))
+	memoOutSideIndex := 0
+	for i, part := range sal {
+		partLength := len(part.cells)
+
+		memo := -1
+		memoIndex := 0
+		for j, item := range workingQuizLine {
+			if memo+item+1 > partLength {
+				break
+			}
+			memo += item + 1
+			memoIndex = j + 1
 		}
+
+		quizItemAllocationInPart := make(QuizItemAllocationInPart, memoIndex)
+		for j, item := range workingQuizLine[:memoIndex] {
+			quizItemAllocationInPart[j] = QuizLineItem{
+				index: memoOutSideIndex,
+				value: item,
+			}
+			memoOutSideIndex += 1
+		}
+		quizItemAllocationPattern[i] = quizItemAllocationInPart
+
+		workingQuizLine = workingQuizLine[memoIndex:]
+
+		// lengthList[i] = partLength
 	}
-	return QuizItemAllocationPatterns{QuizItemAllocationPattern{quizItemAllocationInPart}}
+
+	// TODO: 現状左端に詰めたパターンのみ。他のパターンも計算する
+
+	return QuizItemAllocationPatterns{quizItemAllocationPattern}
 }
 
 // QuizLineの数値1個分がAnswerLineのうちのどの範囲に入りうるか
@@ -175,11 +229,8 @@ func (qiap QuizItemAllocationPatterns) calculateItemRangeListPatterns(quizLineLe
 	// QuizLineItemの割り振りパターンでforを回す
 	for h, itemAllocationPattern := range qiap {
 		itemRangeList := make(ItemRangeList, 0, quizLineLength)
-		offset := 0
 		// その中で、splitされた一箇所の、QuizLineItemとAnswerの値を取り出す
 		for i := range splittedAnswerLine {
-			// TODO: answerにFilledがあって取りうる範囲が変わるケースにも対応する
-
 			// QuizLineの一部分。構造体なので、全体のQuizLineの何番目かのindexも取れる
 			// [3,1,2]
 			partQuizLineItem := itemAllocationPattern[i]
@@ -194,20 +245,21 @@ func (qiap QuizItemAllocationPatterns) calculateItemRangeListPatterns(quizLineLe
 				for k := range j {
 					start += partQuizLineItem[k].value + 1
 				}
-				end := len(answer) - 1
+				end := len(answer.cells) - 1
 				for k := j + 1; k < len(partQuizLineItem); k++ {
 					end -= partQuizLineItem[k].value + 1
 				}
 
 				itemRangeList = append(itemRangeList, ItemRange{
-					start: offset + start,
-					end:   offset + end,
+					start: answer.start + start,
+					end:   answer.start + end,
 					item:  quizItem,
 				})
 			}
 
-			// 次の周回で、これまでのsplitのマス数を把握するためoffsetに加算
-			offset += len(answer)
+			fmt.Println(partQuizLineItem, answer, itemRangeList)
+
+			// TODO: rangeからanswerを切り出し、Filledの塊があればそこを基準に、QuizLineItem.valueとの差だけ左右に範囲を広げる
 		}
 		// 1パターン分できたのでpush
 		itemRangeListPatterns[h] = itemRangeList
