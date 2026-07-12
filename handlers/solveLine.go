@@ -19,8 +19,6 @@ func (a AnswerLine) SolveLine(quizLine []int) bool {
 		return false
 	}
 
-	isAutoUnfilledBeforeChanged := a.autoUnfilled(quizLine)
-
 	// AnswerLineをUnfilled(x)で分割して、Unsettled(_)とFilled(◼)の塊に分ける
 	// Unfilledが連続しても1つ分のUnfilledとみなして分割する
 	// [_,_,◼,_,_,x,_,_,x,x,_,_,x] => [[_,_,◼,_,_],[_,_],[_,_]]
@@ -37,39 +35,17 @@ func (a AnswerLine) SolveLine(quizLine []int) bool {
 	fmt.Printf("この行の問題の各数値がどの範囲に入りうるか\n　　%+v\n", maxItemRangeList)
 
 	// maxItemRangeの長さが、itemの長さの2倍未満の場合、itemRangeの中央部分は必ず黒になるので、answerLineを更新する
-	isCenterOverlapChanged := maxItemRangeList.fillCenterOverlap(a)
+	isCenterOverlapChanged := a.fillCenterOverlap(maxItemRangeList)
 
-	// isAutoUnfilledAfterChanged := a.autoUnfilled(quizLine)
+	isAutoUnfilledChanged := a.autoUnfilled(quizLine)
 
-	return isCenterOverlapChanged || isAutoUnfilledBeforeChanged
+	isUnfilledUnreachableAreaChanged := a.unfilledUnreachableArea(maxItemRangeList)
+
+	return isCenterOverlapChanged || isAutoUnfilledChanged || isUnfilledUnreachableAreaChanged
 }
 
 func (a AnswerLine) isSolved() bool {
 	return !slices.Contains(a, schemas.Unsettled)
-}
-
-func (a AnswerLine) autoUnfilled(quizLine []int) bool {
-	// TODO 端から黒確定していたらUnfilledを塗っていく処理も兼ねさせる
-	isChanged := false
-	quizFilledCount := 0
-	answerFilledCount := 0
-	for _, quizItem := range quizLine {
-		quizFilledCount += quizItem
-	}
-	for _, cell := range a {
-		if cell == schemas.Filled {
-			answerFilledCount += 1
-		}
-	}
-	if quizFilledCount == answerFilledCount {
-		for i := range a {
-			if a[i] == schemas.Unsettled {
-				a[i] = schemas.Unfilled
-				isChanged = true
-			}
-		}
-	}
-	return isChanged
 }
 
 // AnswerLineをUnfilled(x)で分割した一部分
@@ -191,93 +167,74 @@ func (sal SplittedAnswerLine) generateQuizPatterns(quizLine []int) QuizItemAlloc
 
 	var recFunc func(innerQuizLine []QuizLineItem, innerSal SplittedAnswerLine) QuizItemAllocationPatterns
 	recFunc = func(innerQuizLine []QuizLineItem, innerSal SplittedAnswerLine) QuizItemAllocationPatterns {
+		// fmt.Printf("start recFunc\n　quiz: %+v target answer: %+v\n", innerQuizLine, innerSal[0])
 		var wholePatterns QuizItemAllocationPatterns
 		if len(innerQuizLine) == 0 {
+			// innerSalの長さ分partを含める必要がある
 			wholePatterns = append(wholePatterns,
-				QuizItemAllocationPattern{
-					QuizItemAllocationInPart{},
-				},
+				make(QuizItemAllocationPattern, len(innerSal)),
 			)
 		} else if len(innerSal) == 1 {
 			sum := -1
 			for _, qlv := range innerQuizLine {
 				sum += qlv.value + 1
 			}
-			if sum > len(innerSal[0].cells) {
+			if sum <= len(innerSal[0].cells) {
 				wholePatterns = append(wholePatterns,
 					QuizItemAllocationPattern{
 						QuizItemAllocationInPart(innerQuizLine),
 					},
 				)
+			} else {
+				// 入り切らないケースはnilとしてしまう
+				// fmt.Printf(
+				// 	"finish recFunc\n　quiz: %+v target answer: %+v result: nil\n",
+				// 	innerQuizLine, innerSal[0],
+				// )
+				return nil
 			}
 		} else {
+			// fmt.Println("current part: []")
 			patterns := recFunc(innerQuizLine, innerSal[1:])
-			for i := range patterns {
-				patterns[i] = append(QuizItemAllocationPattern{}, patterns[i]...)
+			if patterns != nil {
+				for i := range patterns {
+					patterns[i] = append(
+						QuizItemAllocationPattern{QuizItemAllocationInPart{}},
+						patterns[i]...,
+					)
+				}
+				// fmt.Printf("append pattern: %+v\n", patterns)
+				wholePatterns = append(wholePatterns, patterns...)
 			}
-			wholePatterns = append(wholePatterns, patterns...)
 
 			for i := range innerQuizLine {
 				sum := -1
-				for j := range i {
+				for j := 0; j <= i; j++ {
 					sum += innerQuizLine[j].value + 1
 				}
 				if sum > len(innerSal[0].cells) {
 					break
 				}
+				// fmt.Println("current part:", innerQuizLine[:i+1])
 				patterns = recFunc(innerQuizLine[i+1:], innerSal[1:])
-				for j := range patterns {
-					patterns[j] = append(QuizItemAllocationPattern{
-						QuizItemAllocationInPart(innerQuizLine[:i]),
-					}, patterns[j]...)
+				if patterns != nil {
+					for j := range patterns {
+						patterns[j] = append(
+							QuizItemAllocationPattern{
+								QuizItemAllocationInPart(innerQuizLine[:i+1]),
+							},
+							patterns[j]...,
+						)
+					}
+					// fmt.Printf("append pattern: %+v\n", patterns)
+					wholePatterns = append(wholePatterns, patterns...)
 				}
-				wholePatterns = append(wholePatterns, patterns...)
 			}
 		}
+		// fmt.Printf("finish recFunc\n　quiz: %+v target answer: %+v result: %+v\n", innerQuizLine, innerSal[0], wholePatterns)
 		return wholePatterns
 	}
 	return recFunc(workingQuizLineItems, sal)
-
-	// quizItemAllocationPattern := make(QuizItemAllocationPattern, len(sal))
-
-	// for i, part := range sal {
-	// 	partLength := len(part.cells)
-
-	// 	// 1周目は余白の+1が不要だが、条件分岐をサボるため初期値を-1にして誤魔化している
-	// 	fillingQuizItemLengthInPart := -1
-	// 	// このパートに含める切り出しのインデックス
-	// 	fillingQuizItemIndex := 0
-	// 	for j, item := range workingQuizLineItems {
-	// 		// はみ出したらj番目は含めない
-	// 		if fillingQuizItemLengthInPart+item.value+1 > partLength {
-	// 			break
-	// 		}
-	// 		// 前のquizLineItemとの余白の1マスを明けるため+1をしている
-	// 		fillingQuizItemLengthInPart += item.value + 1
-	// 		// インデックス切り出しは[l:h]のh-1まで取得するため、indexを1大きくしておく
-	// 		fillingQuizItemIndex = j + 1
-
-	// 		// 例えば[_,_,_,◼,_]に[3,1]を割り振る際、ぴったり詰めると間もFilledになってしまう
-	// 		// そのため、左寄せで配置した後、その右に続くFilled分ずらす必要がある
-	// 		k := 0
-	// 		for k < len(part.cells)-1-fillingQuizItemLengthInPart {
-	// 			if part.cells[fillingQuizItemLengthInPart+k+1] == schemas.Filled {
-	// 				k += 1
-	// 			} else {
-	// 				break
-	// 			}
-	// 		}
-	// 		fillingQuizItemLengthInPart += k
-	// 	}
-
-	// 	// はみ出さなかったitemを今パターンのPartとして追加、切り出した残りは引き続きworkingとして使う
-	// 	quizItemAllocationPattern[i] = workingQuizLineItems[:fillingQuizItemIndex]
-	// 	workingQuizLineItems = workingQuizLineItems[fillingQuizItemIndex:]
-	// }
-
-	// TODO: 現状左端に詰めたパターンのみ。他のパターンも計算する
-
-	// return QuizItemAllocationPatterns{quizItemAllocationPattern}
 }
 
 // QuizLineの数値1個分がAnswerLineのうちのどの範囲に入りうるか
@@ -285,8 +242,23 @@ type ItemRange struct {
 	// itemの左端が入りうる開始位置(全域の場合0が入る)
 	start int
 	// itemの右端が入りうる終了位置(全域の場合len(answerLine)-1が入る)
-	end  int
+	end int
+
+	filledStart *int
+	filledEnd   *int
+
 	item QuizLineItem
+}
+
+func (ir ItemRange) String() string {
+	if ir.filledStart != nil {
+		return fmt.Sprintf(
+			"{start:%d end:%d filledStart:%d filledEnd:%d item:%+v}",
+			ir.start, ir.end, *ir.filledStart, *ir.filledEnd, ir.item,
+		)
+	} else {
+		return fmt.Sprintf("{start:%d end:%d item:%+v}", ir.start, ir.end, ir.item)
+	}
 }
 
 func (ir ItemRange) Length() int {
@@ -320,6 +292,8 @@ func (qiap QuizItemAllocationPatterns) calculateItemRangeListPatterns(quizLineLe
 			// [_,_,_,◼,_,_,_,_,_]
 			answer := splittedAnswerLine[i]
 
+			// fmt.Printf("=====\n　確認中の問題の一部: %+v\n　その数値が入る解答欄の一部: %+v\n", partQuizLineItem, answer)
+
 			// QuizLineの数値ひとつに注目
 			for j, quizItem := range partQuizLineItem {
 				// この周回のquizItemを除いた、左側の数値の合計+余白マス数分startをずらし、右側の数値の合計+余白マス数分endをずらして、範囲を計算する
@@ -331,47 +305,58 @@ func (qiap QuizItemAllocationPatterns) calculateItemRangeListPatterns(quizLineLe
 				for k := j + 1; k < len(partQuizLineItem); k++ {
 					end -= partQuizLineItem[k].value + 1
 				}
-
-				// startとendの中にFilledがある場合はそれを中心に範囲を狭める
-				// 実装メモ
-				// [3,1,2]
-				// [_,_,_,◼,_,_,_,_,_]
-				// 3は ls=0,le=3 k_index=3の段階でfilledBlockが終わり
-				//
-				// filledBlockEndIndex - itemRange.item.valueとstartの内大きい(右寄り)なindexをstartとする
-				// filledBlockStartIndex + itemRange.item.valueとendの内小さい(左寄り)なindexをendとする
-				// unsettledが来る前に切り出したanswerが終わるケースにも注意
-				// blockが2つ含まれるケースはまた後で
-				filledBlockStartIndex := -1
-				filledBlockEndIndex := -1
-				for k, cell := range answer.cells[start : end+1] {
-					if cell == schemas.Filled {
-						if filledBlockStartIndex == -1 {
-							filledBlockStartIndex = k
-						}
-						filledBlockEndIndex = k
-					}
-				}
-				// filledがあればrangeを調整
-				if filledBlockStartIndex != -1 {
-					start = max(start, filledBlockEndIndex-quizItem.value)
-					end = max(start, filledBlockStartIndex+quizItem.value)
-				}
-
 				// start,endはグローバルな一次元座標なので、オフセットとなるanswer.startを加算している
-				itemRangeList = append(itemRangeList, ItemRange{
+				ir := ItemRange{
 					start: answer.start + start,
 					end:   answer.start + end,
 					item:  quizItem,
-				})
+				}
+				// 一つ前のitemRangeのfilledEndよりもstartが左にある場合、手放す必要があるのでずらす
+				if j != 0 && itemRangeList[len(itemRangeList)-1].filledEnd != nil {
+					ir.start = max(ir.start, *itemRangeList[len(itemRangeList)-1].filledEnd+1)
+				}
+				// fmt.Printf("answer確認前の範囲: %d ~ %d\n", ir.start, ir.end)
+
+				// startとendの中にFilledがある場合はそれを中心に範囲を狭める
+				// FIXME: このロジックがおかしい
+				filledBlockStartIndex := -1
+				filledBlockEndIndex := -1
+				// fmt.Printf("answer切り出し: %+v\n", answer.cells[ir.start-answer.start:ir.end-answer.start+1])
+				for k, cell := range answer.cells[ir.start-answer.start : ir.end-answer.start+1] {
+					if cell == schemas.Filled {
+						if filledBlockStartIndex == -1 {
+							filledBlockStartIndex = k + ir.start
+						}
+						filledBlockEndIndex = k + ir.start
+					} else if filledBlockEndIndex != -1 {
+						break
+					}
+				}
+				// fmt.Println(ir.start, ir.end, filledBlockStartIndex, filledBlockEndIndex, quizItem.value)
+				// 違うfilledの塊を掴んでいたら手放す
+				if quizItem.value < filledBlockEndIndex-filledBlockStartIndex+1 {
+					filledBlockStartIndex = -1
+					filledBlockEndIndex = -1
+				}
+				// filledがあればrangeを調整
+				if filledBlockStartIndex != -1 {
+					ir.start = max(ir.start, filledBlockEndIndex-(quizItem.value-1))
+					ir.end = min(ir.end, filledBlockStartIndex+(quizItem.value-1))
+					ir.filledStart = &filledBlockStartIndex
+					ir.filledEnd = &filledBlockEndIndex
+				}
+				// fmt.Printf("answer確認後の範囲: %d ~ %d\n", ir.start, ir.end)
+				// fmt.Printf("最終的なItemRange: %+v\n", ir)
+
+				itemRangeList = append(itemRangeList, ir)
 			}
 
-			fmt.Printf("=====\n　確認中の問題の一部: %+v\n　その数値が入る解答欄の一部: %+v\n　各数値が入る範囲: %+v\n", partQuizLineItem, answer, itemRangeList)
+			// fmt.Printf("各数値が入る範囲: %+v\n", itemRangeList)
 		}
 		// 1パターン分できたのでpush
 		itemRangeListPatterns[h] = itemRangeList
 	}
-	fmt.Printf("各パターンごとの数値の取りうる範囲\n　　%+v\n", itemRangeListPatterns)
+	// fmt.Printf("各パターンごとの数値の取りうる範囲\n　　%+v\n", itemRangeListPatterns)
 
 	maxItemRangeList := make(ItemRangeList, quizLineLength)
 	// 各パターンを回し、各QuizLineItemの入りうる範囲の一番広い範囲を計算する
@@ -388,7 +373,7 @@ func (qiap QuizItemAllocationPatterns) calculateItemRangeListPatterns(quizLineLe
 	return maxItemRangeList
 }
 
-func (irl ItemRangeList) fillCenterOverlap(answerLine AnswerLine) bool {
+func (a AnswerLine) fillCenterOverlap(irl ItemRangeList) bool {
 	isChanged := false
 	for _, itemRange := range irl {
 		// itemRangeの長さが、itemの長さの2倍未満の場合、itemRangeの中央部分は必ず黒になる
@@ -400,11 +385,11 @@ func (irl ItemRangeList) fillCenterOverlap(answerLine AnswerLine) bool {
 		midEnd := itemRange.end - unsettleLength
 		if midStart <= midEnd {
 			for k := midStart; k <= midEnd; k++ {
-				if answerLine[k] == schemas.Unsettled {
-					answerLine[k] = schemas.Filled
+				if a[k] == schemas.Unsettled {
+					a[k] = schemas.Filled
 					isChanged = true
 				}
-				if answerLine[k] == schemas.Unfilled {
+				if a[k] == schemas.Unfilled {
 					panic("ロジックミス")
 				}
 			}
@@ -412,10 +397,72 @@ func (irl ItemRangeList) fillCenterOverlap(answerLine AnswerLine) bool {
 		// 範囲の長さと数値が一致している場合は左右にUnfilledを塗る
 		if unsettleLength == 0 {
 			if midStart > 0 {
-				answerLine[midStart-1] = schemas.Unfilled
+				if a[midStart-1] != schemas.Unfilled {
+					a[midStart-1] = schemas.Unfilled
+					isChanged = true
+				}
 			}
-			if midEnd < len(answerLine)-1 {
-				answerLine[midEnd+1] = schemas.Unfilled
+			if midEnd < len(a)-1 {
+				if a[midEnd+1] != schemas.Unfilled {
+					a[midEnd+1] = schemas.Unfilled
+					isChanged = true
+				}
+			}
+		}
+	}
+	return isChanged
+}
+
+func (a AnswerLine) unfilledUnreachableArea(irl ItemRangeList) bool {
+	isChanged := false
+	checkedIndex := -1
+	for h, itemRange := range irl {
+		if checkedIndex+1 < itemRange.start {
+			fmt.Println("unreachable debug:", h, a[checkedIndex+1:itemRange.start])
+			for i := range a[checkedIndex+1 : itemRange.start] {
+				if a[checkedIndex+1+i] == schemas.Unsettled {
+					a[checkedIndex+1+i] = schemas.Unfilled
+					isChanged = true
+				}
+			}
+		}
+		checkedIndex = itemRange.end
+	}
+	if checkedIndex+1 < len(a) {
+		fmt.Println("unreachable debug: last", a[checkedIndex+1:])
+		for i := range a[checkedIndex+1:] {
+			if a[checkedIndex+1+i] == schemas.Unsettled {
+				a[checkedIndex+1+i] = schemas.Unfilled
+				isChanged = true
+			}
+		}
+	}
+
+	if isChanged {
+		fmt.Println("unreachable debug: isChanged")
+	}
+
+	return isChanged
+}
+
+func (a AnswerLine) autoUnfilled(quizLine []int) bool {
+	// TODO 端から黒確定していたらUnfilledを塗っていく処理も兼ねさせる
+	isChanged := false
+	quizFilledCount := 0
+	answerFilledCount := 0
+	for _, quizItem := range quizLine {
+		quizFilledCount += quizItem
+	}
+	for _, cell := range a {
+		if cell == schemas.Filled {
+			answerFilledCount += 1
+		}
+	}
+	if quizFilledCount == answerFilledCount {
+		for i := range a {
+			if a[i] == schemas.Unsettled {
+				a[i] = schemas.Unfilled
+				isChanged = true
 			}
 		}
 	}

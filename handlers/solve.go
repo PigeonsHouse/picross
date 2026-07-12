@@ -36,10 +36,10 @@ func SolveQuiz(quiz schemas.Quiz, answer *schemas.Answer) bool {
 			}
 			// debug
 			fmt.Printf(
-				"[start] マス数:%d 見てる向き: %v 行番号(0index): %v 問題の数字: %v 解答欄: %v\n\n\n",
+				"[end] マス数:%d 見てる向き: %v 行番号(0index): %v 問題の数字: %v 解答欄: %v\n\n\n",
 				len(answerLine), currentOrientation, lineIndex, quizLine, answerLine,
 			)
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(10 * time.Millisecond)
 		}
 
 		// 変化がなければ、見てる向きのラインが全て終わったとする

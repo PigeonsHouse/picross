@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"picross/schemas"
 	"reflect"
 	"testing"
@@ -31,8 +30,8 @@ func TestSplitAnswerLine(t *testing.T) {
 			},
 		},
 		SplittedAnswerLinePart{
-			start: 4,
-			end:   7,
+			start: 5,
+			end:   8,
 			cells: []schemas.CellType{
 				schemas.Unsettled,
 				schemas.Filled,
@@ -42,13 +41,10 @@ func TestSplitAnswerLine(t *testing.T) {
 		},
 	}
 
-	splittedAnswerLine := answerLine.splitAnswerLine()
+	got := answerLine.splitAnswerLine()
 
-	if !reflect.DeepEqual(splittedAnswerLine, expected) {
-		expBytes, _ := json.MarshalIndent(expected, "", "  ")
-		gotBytes, _ := json.MarshalIndent(splittedAnswerLine, "", "  ")
-
-		t.Errorf("Diff failed. \nExpected:\n%s\n\nGot:\n%s", string(expBytes), string(gotBytes))
+	if !reflect.DeepEqual(got, expected) {
+		t.Errorf("Diff failed. \nExpected:\n%+v\n\nGot:\n%+v", expected, got)
 	}
 }
 
@@ -80,13 +76,10 @@ func TestGenerateQuizPatterns1(t *testing.T) {
 		},
 	}
 
-	quizPatterns := sal.generateQuizPatterns(quizLine)
+	got := sal.generateQuizPatterns(quizLine)
 
-	if !reflect.DeepEqual(quizPatterns, expected) {
-		expBytes, _ := json.MarshalIndent(expected, "", "  ")
-		gotBytes, _ := json.MarshalIndent(quizPatterns, "", "  ")
-
-		t.Errorf("Diff failed. \nExpected:\n%s\n\nGot:\n%s", string(expBytes), string(gotBytes))
+	if !reflect.DeepEqual(got, expected) {
+		t.Errorf("Diff failed. \nExpected:\n%+v\n\nGot:\n%+v", expected, got)
 	}
 }
 
@@ -105,7 +98,7 @@ func TestGenerateQuizPatterns2(t *testing.T) {
 			},
 		},
 		SplittedAnswerLinePart{
-			start: 4,
+			start: 5,
 			end:   6,
 			cells: []schemas.CellType{
 				schemas.Unsettled,
@@ -113,7 +106,7 @@ func TestGenerateQuizPatterns2(t *testing.T) {
 			},
 		},
 		SplittedAnswerLinePart{
-			start: 6,
+			start: 7,
 			end:   8,
 			cells: []schemas.CellType{
 				schemas.Unsettled,
@@ -138,29 +131,26 @@ func TestGenerateQuizPatterns2(t *testing.T) {
 				QuizLineItem{index: 0, value: 3},
 				QuizLineItem{index: 1, value: 1},
 			},
+			QuizItemAllocationInPart{},
 			QuizItemAllocationInPart{
 				QuizLineItem{index: 2, value: 2},
 			},
-			QuizItemAllocationInPart{},
 		},
 		QuizItemAllocationPattern{
 			QuizItemAllocationInPart{
 				QuizLineItem{index: 0, value: 3},
 				QuizLineItem{index: 1, value: 1},
 			},
-			QuizItemAllocationInPart{},
 			QuizItemAllocationInPart{
 				QuizLineItem{index: 2, value: 2},
 			},
+			QuizItemAllocationInPart{},
 		},
 	}
 
-	quizPatterns := sal.generateQuizPatterns(quizLine)
+	got := sal.generateQuizPatterns(quizLine)
 
-	if !reflect.DeepEqual(quizPatterns, expected) {
-		expBytes, _ := json.MarshalIndent(expected, "", "  ")
-		gotBytes, _ := json.MarshalIndent(quizPatterns, "", "  ")
-
-		t.Errorf("Diff failed. \nExpected:\n%s\n\nGot:\n%s", string(expBytes), string(gotBytes))
+	if !reflect.DeepEqual(got, expected) {
+		t.Errorf("Diff failed. \nExpected:\n%+v\n\nGot:\n%+v", expected, got)
 	}
 }
