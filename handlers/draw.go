@@ -11,11 +11,11 @@ import (
 )
 
 const (
-	marginX        = 40
-	marginTop      = 120
-	marginBottom   = 30
-	boxWidth       = 30
-	boxBorderWidth = 2
+	marginX         = 40
+	marginTop       = 120
+	marginBottom    = 30
+	cellWidth       = 30
+	cellBorderWidth = 2
 )
 
 var (
@@ -36,8 +36,8 @@ func DrawAnswerImage(answer schemas.Answer, outputPath string) {
 		image.Rect(
 			0,
 			0,
-			marginX*2+(boxBorderWidth+boxWidth)*horizontalCellNumber+boxBorderWidth,
-			marginTop+marginBottom+(boxBorderWidth+boxWidth)*verticalCellNumber+boxBorderWidth,
+			marginX*2+(cellBorderWidth+cellWidth)*horizontalCellNumber+cellBorderWidth,
+			marginTop+marginBottom+(cellBorderWidth+cellWidth)*verticalCellNumber+cellBorderWidth,
 		),
 	)
 	// 白で塗りつぶす
@@ -48,8 +48,8 @@ func DrawAnswerImage(answer schemas.Answer, outputPath string) {
 		image.Rect(
 			marginX,
 			marginTop,
-			marginX+(boxBorderWidth+boxWidth)*horizontalCellNumber+boxBorderWidth,
-			marginTop+(boxBorderWidth+boxWidth)*verticalCellNumber+boxBorderWidth,
+			marginX+(cellBorderWidth+cellWidth)*horizontalCellNumber+cellBorderWidth,
+			marginTop+(cellBorderWidth+cellWidth)*verticalCellNumber+cellBorderWidth,
 		),
 		&image.Uniform{borderColor},
 		image.Point{0, 0}, draw.Src,
@@ -69,10 +69,10 @@ func DrawAnswerImage(answer schemas.Answer, outputPath string) {
 		draw.Draw(
 			img,
 			image.Rect(
-				marginX+boxBorderWidth+(boxWidth+boxBorderWidth)*x,
-				marginTop+boxBorderWidth+(boxWidth+boxBorderWidth)*y,
-				marginX+(boxBorderWidth+boxWidth)*(x+1),
-				marginTop+(boxBorderWidth+boxWidth)*(y+1),
+				marginX+cellBorderWidth+(cellWidth+cellBorderWidth)*x,
+				marginTop+cellBorderWidth+(cellWidth+cellBorderWidth)*y,
+				marginX+(cellBorderWidth+cellWidth)*(x+1),
+				marginTop+(cellBorderWidth+cellWidth)*(y+1),
 			),
 			&image.Uniform{cellColor},
 			image.Point{0, 0},
