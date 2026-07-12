@@ -149,8 +149,20 @@ func (sal SplittedAnswerLine) generateQuizPatterns(quizLine []int) QuizItemAlloc
 	// 例: quizLine=[3,1,2], sal=[[_,_,_,_,_],[_,_],[_,_]] の場合、以下のパターンが考えられる
 	// - [3,1,2] -> [[3], [1], [2]]
 	// - [3,1,2] -> [[3,1], [2], []]
+	// - [3,1,2] -> [[3,1], [], [2]]
 	// この場合、以下のような値を返す
 	// QuizItemPatterns {
+	//   QuizItemAllocationPattern {
+	//     QuizItemAllocationInPart {
+	//       QuizLineItem{index:0, value:3},
+	//     },
+	//     QuizItemAllocationInPart {
+	//       QuizLineItem{index:1, value:1},
+	//     },
+	//     QuizItemAllocationInPart {
+	//       QuizLineItem{index:2, value:2},
+	//     },
+	//   },
 	//   QuizItemAllocationPattern {
 	//     QuizItemAllocationInPart {
 	//       QuizLineItem{index:0, value:3},
@@ -164,10 +176,9 @@ func (sal SplittedAnswerLine) generateQuizPatterns(quizLine []int) QuizItemAlloc
 	//   QuizItemAllocationPattern {
 	//     QuizItemAllocationInPart {
 	//       QuizLineItem{index:0, value:3},
-	//     },
-	//     QuizItemAllocationInPart {
 	//       QuizLineItem{index:1, value:1},
 	//     },
+	//     {},
 	//     QuizItemAllocationInPart {
 	//       QuizLineItem{index:2, value:2},
 	//     },
@@ -176,47 +187,97 @@ func (sal SplittedAnswerLine) generateQuizPatterns(quizLine []int) QuizItemAlloc
 	// 上の場合は、3や1を1つずついれる場合は3、1それぞれの長さだけで入るが、2つ以上まとめて入れる場合は間のスペースの分も考慮する必要がある
 	// 例えば、[3,1]を[_,_,_,_,_]に入れる場合、[3,1]の間に1つスペースが必要なので、3+1+1=5となり、ちょうど入る
 
-	quizItemAllocationPattern := make(QuizItemAllocationPattern, len(sal))
-
 	workingQuizLineItems := convertQuizLineItemList(quizLine)
-	for i, part := range sal {
-		partLength := len(part.cells)
 
-		// 1周目は余白の+1が不要だが、条件分岐をサボるため初期値を-1にして誤魔化している
-		fillingQuizItemLengthInPart := -1
-		// このパートに含める切り出しのインデックス
-		fillingQuizItemIndex := 0
-		for j, item := range workingQuizLineItems {
-			// はみ出したらj番目は含めない
-			if fillingQuizItemLengthInPart+item.value+1 > partLength {
-				break
+	var recFunc func(innerQuizLine []QuizLineItem, innerSal SplittedAnswerLine) QuizItemAllocationPatterns
+	recFunc = func(innerQuizLine []QuizLineItem, innerSal SplittedAnswerLine) QuizItemAllocationPatterns {
+		var wholePatterns QuizItemAllocationPatterns
+		if len(innerQuizLine) == 0 {
+			wholePatterns = append(wholePatterns,
+				QuizItemAllocationPattern{
+					QuizItemAllocationInPart{},
+				},
+			)
+		} else if len(innerSal) == 1 {
+			sum := -1
+			for _, qlv := range innerQuizLine {
+				sum += qlv.value + 1
 			}
-			// 前のquizLineItemとの余白の1マスを明けるため+1をしている
-			fillingQuizItemLengthInPart += item.value + 1
-			// インデックス切り出しは[l:h]のh-1まで取得するため、indexを1大きくしておく
-			fillingQuizItemIndex = j + 1
+			if sum > len(innerSal[0].cells) {
+				wholePatterns = append(wholePatterns,
+					QuizItemAllocationPattern{
+						QuizItemAllocationInPart(innerQuizLine),
+					},
+				)
+			}
+		} else {
+			patterns := recFunc(innerQuizLine, innerSal[1:])
+			for i := range patterns {
+				patterns[i] = append(QuizItemAllocationPattern{}, patterns[i]...)
+			}
+			wholePatterns = append(wholePatterns, patterns...)
 
-			// 例えば[_,_,_,◼,_]に[3,1]を割り振る際、ぴったり詰めると間もFilledになってしまう
-			// そのため、左寄せで配置した後、その右に続くFilled分ずらす必要がある
-			k := 0
-			for k < len(part.cells)-1-fillingQuizItemLengthInPart {
-				if part.cells[fillingQuizItemLengthInPart+k+1] == schemas.Filled {
-					k += 1
-				} else {
+			for i := range innerQuizLine {
+				sum := -1
+				for j := range i {
+					sum += innerQuizLine[j].value + 1
+				}
+				if sum > len(innerSal[0].cells) {
 					break
 				}
+				patterns = recFunc(innerQuizLine[i+1:], innerSal[1:])
+				for j := range patterns {
+					patterns[j] = append(QuizItemAllocationPattern{
+						QuizItemAllocationInPart(innerQuizLine[:i]),
+					}, patterns[j]...)
+				}
+				wholePatterns = append(wholePatterns, patterns...)
 			}
-			fillingQuizItemLengthInPart += k
 		}
-
-		// はみ出さなかったitemを今パターンのPartとして追加、切り出した残りは引き続きworkingとして使う
-		quizItemAllocationPattern[i] = workingQuizLineItems[:fillingQuizItemIndex]
-		workingQuizLineItems = workingQuizLineItems[fillingQuizItemIndex:]
+		return wholePatterns
 	}
+	return recFunc(workingQuizLineItems, sal)
+
+	// quizItemAllocationPattern := make(QuizItemAllocationPattern, len(sal))
+
+	// for i, part := range sal {
+	// 	partLength := len(part.cells)
+
+	// 	// 1周目は余白の+1が不要だが、条件分岐をサボるため初期値を-1にして誤魔化している
+	// 	fillingQuizItemLengthInPart := -1
+	// 	// このパートに含める切り出しのインデックス
+	// 	fillingQuizItemIndex := 0
+	// 	for j, item := range workingQuizLineItems {
+	// 		// はみ出したらj番目は含めない
+	// 		if fillingQuizItemLengthInPart+item.value+1 > partLength {
+	// 			break
+	// 		}
+	// 		// 前のquizLineItemとの余白の1マスを明けるため+1をしている
+	// 		fillingQuizItemLengthInPart += item.value + 1
+	// 		// インデックス切り出しは[l:h]のh-1まで取得するため、indexを1大きくしておく
+	// 		fillingQuizItemIndex = j + 1
+
+	// 		// 例えば[_,_,_,◼,_]に[3,1]を割り振る際、ぴったり詰めると間もFilledになってしまう
+	// 		// そのため、左寄せで配置した後、その右に続くFilled分ずらす必要がある
+	// 		k := 0
+	// 		for k < len(part.cells)-1-fillingQuizItemLengthInPart {
+	// 			if part.cells[fillingQuizItemLengthInPart+k+1] == schemas.Filled {
+	// 				k += 1
+	// 			} else {
+	// 				break
+	// 			}
+	// 		}
+	// 		fillingQuizItemLengthInPart += k
+	// 	}
+
+	// 	// はみ出さなかったitemを今パターンのPartとして追加、切り出した残りは引き続きworkingとして使う
+	// 	quizItemAllocationPattern[i] = workingQuizLineItems[:fillingQuizItemIndex]
+	// 	workingQuizLineItems = workingQuizLineItems[fillingQuizItemIndex:]
+	// }
 
 	// TODO: 現状左端に詰めたパターンのみ。他のパターンも計算する
 
-	return QuizItemAllocationPatterns{quizItemAllocationPattern}
+	// return QuizItemAllocationPatterns{quizItemAllocationPattern}
 }
 
 // QuizLineの数値1個分がAnswerLineのうちのどの範囲に入りうるか
