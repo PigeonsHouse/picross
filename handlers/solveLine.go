@@ -334,6 +334,7 @@ func (qiap QuizItemAllocationPatterns) calculateItemRangeListPatterns(quizLineLe
 
 				// startとendの中にFilledがある場合はそれを中心に範囲を狭める
 				// FIXME: このロジックがおかしい
+				// MEMO: 各startとendに含まれるFilledが1つだけのQuizItemのみに登場する場合、中心を狭められる
 				filledBlockStartIndex := -1
 				filledBlockEndIndex := -1
 				// fmt.Printf("answer切り出し: %+v\n", answer.cells[ir.start-answer.start:ir.end-answer.start+1])
