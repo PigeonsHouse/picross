@@ -165,6 +165,28 @@ func (sal SplittedAnswerLine) generateQuizPatterns(quizLine []int) QuizItemAlloc
 
 	workingQuizLineItems := convertQuizLineItemList(quizLine)
 
+    isContainable := func (quizLine []QuizLineItem, cells []schemas.CellType) bool {
+		sum := -1
+		for _, item := range quizLine {
+			sum += item.value+1
+		}
+		if sum == len(cells) {
+			idx := -1
+			for _, item := range quizLine {
+				idx += item.value+1
+				if idx == len(cells) {
+					break
+				}
+				if cells[idx] == schemas.Filled {
+					return false
+				}
+			}
+			return true
+		} else {
+			return sum<len(cells)
+		}
+	}
+
 	var recFunc func(innerQuizLine []QuizLineItem, innerSal SplittedAnswerLine) QuizItemAllocationPatterns
 	recFunc = func(innerQuizLine []QuizLineItem, innerSal SplittedAnswerLine) QuizItemAllocationPatterns {
 		// fmt.Printf("start recFunc\n　quiz: %+v target answer: %+v\n", innerQuizLine, innerSal[0])
@@ -175,11 +197,7 @@ func (sal SplittedAnswerLine) generateQuizPatterns(quizLine []int) QuizItemAlloc
 				make(QuizItemAllocationPattern, len(innerSal)),
 			)
 		} else if len(innerSal) == 1 {
-			sum := -1
-			for _, qlv := range innerQuizLine {
-				sum += qlv.value + 1
-			}
-			if sum <= len(innerSal[0].cells) {
+			if isContainable(innerQuizLine, innerSal[0].cells) {
 				wholePatterns = append(wholePatterns,
 					QuizItemAllocationPattern{
 						QuizItemAllocationInPart(innerQuizLine),
@@ -208,11 +226,8 @@ func (sal SplittedAnswerLine) generateQuizPatterns(quizLine []int) QuizItemAlloc
 			}
 
 			for i := range innerQuizLine {
-				sum := -1
-				for j := 0; j <= i; j++ {
-					sum += innerQuizLine[j].value + 1
-				}
-				if sum > len(innerSal[0].cells) {
+				target := innerQuizLine[:i+1]
+				if !isContainable(target, innerSal[0].cells) {
 					break
 				}
 				// fmt.Println("current part:", innerQuizLine[:i+1])
@@ -221,7 +236,7 @@ func (sal SplittedAnswerLine) generateQuizPatterns(quizLine []int) QuizItemAlloc
 					for j := range patterns {
 						patterns[j] = append(
 							QuizItemAllocationPattern{
-								QuizItemAllocationInPart(innerQuizLine[:i+1]),
+								QuizItemAllocationInPart(target),
 							},
 							patterns[j]...,
 						)
