@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"picross/handlers/solveLine"
 	"picross/schemas"
 	"time"
 )
@@ -22,7 +23,7 @@ func SolveQuiz(quiz schemas.Quiz, answer *schemas.Answer) bool {
 		for lineIndex := 0; lineIndex < answer.GetLength(currentOrientation); lineIndex++ {
 			// 問題のラインと回答用のラインを取得
 			quizLine := quiz.ReadLine(currentOrientation, lineIndex)
-			var answerLine AnswerLine = answer.ReadLine(currentOrientation, lineIndex)
+			var answerLine solveLine.AnswerLine = answer.ReadLine(currentOrientation, lineIndex)
 			// debug
 			fmt.Printf(
 				"[start] マス数:%d 見てる向き: %v 行番号(0index): %v 問題の数字: %v 解答欄: %v\n",
