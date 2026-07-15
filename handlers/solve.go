@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"fmt"
+	"os"
+	"os/exec"
 	"picross/handlers/solveLine"
 	"picross/schemas"
 	"time"
@@ -40,7 +42,14 @@ func SolveQuiz(quiz schemas.Quiz, answer *schemas.Answer) bool {
 				"[end] マス数:%d 見てる向き: %v 行番号(0index): %v 問題の数字: %v 解答欄: %v\n\n\n",
 				len(answerLine), currentOrientation, lineIndex, quizLine, answerLine,
 			)
-			time.Sleep(10 * time.Millisecond)
+			// time.Sleep(10 * time.Millisecond)
+
+			// debug for progress
+			cmd := exec.Command("cmd", "/c", "cls")
+			cmd.Stdout = os.Stdout
+			cmd.Run()
+			answer.Log()
+			time.Sleep(50 * time.Millisecond)
 		}
 
 		// 変化がなければ、見てる向きのラインが全て終わったとする
