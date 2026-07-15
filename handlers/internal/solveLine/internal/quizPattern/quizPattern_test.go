@@ -1,7 +1,7 @@
 package quizpattern
 
 import (
-	splitanswerline "picross/handlers/solveLine/internal/splitAnswerLine"
+	splitanswerline "picross/handlers/internal/solveLine/internal/splitAnswerLine"
 	"picross/schemas"
 	"reflect"
 	"testing"

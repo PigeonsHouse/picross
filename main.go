@@ -2,17 +2,20 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"os"
 	"picross/handlers"
+	"picross/logger"
 )
 
 func main() {
+	logLevel := logger.Progress
+	logger.Init(logLevel)
+
 	outputPath := flag.String("o", "answer.png", "quiz file path")
 	flag.Parse()
 	args := flag.Args()
 	if len(args) < 1 {
-		fmt.Println("[ERR] コマンド引数で、解くピクロスのjsonファイルのパスを指定してください")
+		logger.ErrorLog("コマンド引数で、解くピクロスのjsonファイルのパスを指定してください")
 		os.Exit(1)
 	}
 	inputPath := args[0]
@@ -21,8 +24,9 @@ func main() {
 	if isSolved := handlers.SolveQuiz(quiz, &ans); isSolved {
 		handlers.DrawAnswerImage(ans, *outputPath)
 	} else {
-		fmt.Println("与えられたピクロスが解けませんでした")
-		// デバッグのために、解けなかった場合も画像を出力する
-		handlers.DrawAnswerImage(ans, *outputPath)
+		logger.InfoLog("与えられたピクロスが解けませんでした")
+		if logLevel == logger.Debug {
+			handlers.DrawAnswerImage(ans, *outputPath)
+		}
 	}
 }

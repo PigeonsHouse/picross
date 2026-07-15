@@ -2,9 +2,8 @@ package handlers
 
 import (
 	"fmt"
-	"os"
-	"os/exec"
-	"picross/handlers/solveLine"
+	"picross/handlers/internal/solveLine"
+	"picross/logger"
 	"picross/schemas"
 	"time"
 )
@@ -26,30 +25,32 @@ func SolveQuiz(quiz schemas.Quiz, answer *schemas.Answer) bool {
 			// 問題のラインと回答用のラインを取得
 			quizLine := quiz.ReadLine(currentOrientation, lineIndex)
 			var answerLine solveLine.AnswerLine = answer.ReadLine(currentOrientation, lineIndex)
-			// debug
-			fmt.Printf(
-				"[start] マス数:%d 見てる向き: %v 行番号(0index): %v 問題の数字: %v 解答欄: %v\n",
+			logger.DebugLog(fmt.Sprintf(
+				"[start] マス数:%d 見てる向き: %v 行番号(0index): %v 問題の数字: %v 解答欄: %v",
 				len(answerLine), currentOrientation, lineIndex, quizLine, answerLine,
-			)
+			))
 
 			// 変化があった場合は、answerに保存する
 			if isChangedLine := answerLine.SolveLine(quizLine); isChangedLine {
 				answer.WriteLine(currentOrientation, lineIndex, answerLine)
 				isChanged = true
 			}
-			// debug
-			fmt.Printf(
-				"[end] マス数:%d 見てる向き: %v 行番号(0index): %v 問題の数字: %v 解答欄: %v\n\n\n",
+			logger.DebugLog(fmt.Sprintf(
+				"[end] マス数:%d 見てる向き: %v 行番号(0index): %v 問題の数字: %v 解答欄: %v\n\n",
 				len(answerLine), currentOrientation, lineIndex, quizLine, answerLine,
-			)
-			// time.Sleep(10 * time.Millisecond)
+			))
+			if logger.AppLogLevel() == logger.Debug {
+				// time.Sleep(500 * time.Millisecond)
+			}
 
-			// debug for progress
-			cmd := exec.Command("cmd", "/c", "cls")
-			cmd.Stdout = os.Stdout
-			cmd.Run()
-			answer.Log()
-			time.Sleep(50 * time.Millisecond)
+			if logger.AppLogLevel() == logger.Progress {
+				logger.CleanTerminal()
+				answer.Log(&schemas.LogOption{
+					Orientation: currentOrientation,
+					Index:       lineIndex,
+				})
+				time.Sleep(200 * time.Millisecond)
+			}
 		}
 
 		// 変化がなければ、見てる向きのラインが全て終わったとする

@@ -1,6 +1,9 @@
 package schemas
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 type CellType int
 
@@ -30,9 +33,31 @@ type Answer struct {
 	cells [][]CellType
 }
 
-func (a Answer) Log() {
-	for _, line := range a.cells {
-		fmt.Println(line)
+type LogOption struct {
+	Orientation Orientation
+	Index       int
+}
+
+func (a Answer) Log(option *LogOption) {
+	if option == nil {
+		for _, line := range a.cells {
+			fmt.Println(line)
+		}
+	} else {
+		spaces := strings.Repeat(" ", a.GetLength(Horizontal)*2+3)
+		if option.Orientation == Vertical {
+			runes := []rune(spaces)
+			runes[(option.Index+1)*2+1] = 'v'
+			spaces = string(runes)
+		}
+		fmt.Printf("%s\n", spaces)
+		for i, line := range a.cells {
+			cursor := "  "
+			if i == option.Index && option.Orientation == Horizontal {
+				cursor = "> "
+			}
+			fmt.Printf("%s%v\n", cursor, line)
+		}
 	}
 }
 

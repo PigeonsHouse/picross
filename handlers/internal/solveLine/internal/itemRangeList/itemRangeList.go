@@ -3,8 +3,9 @@ package itemrangelist
 import (
 	"fmt"
 	"iter"
-	quizpattern "picross/handlers/solveLine/internal/quizPattern"
-	splitanswerline "picross/handlers/solveLine/internal/splitAnswerLine"
+	quizpattern "picross/handlers/internal/solveLine/internal/quizPattern"
+	splitanswerline "picross/handlers/internal/solveLine/internal/splitAnswerLine"
+	"picross/logger"
 	"picross/schemas"
 )
 
@@ -93,7 +94,9 @@ func CalculateItemRangeListPatterns(quizItemAllocationPatterns quizpattern.QuizI
 			// [_,_,_,◼,_,_,_,_,_]
 			answer := splittedAnswerLine[i]
 
-			fmt.Printf("=====\n　確認中の問題の一部: %+v\n　その数値が入る解答欄の一部: %+v\n", partQuizLineItem, answer)
+			logger.DebugLog(fmt.Sprintf(
+				"=====\n確認中の問題の一部: %+v\nその数値が入る解答欄の一部: %+v", partQuizLineItem, answer,
+			))
 
 			filledOwnerIndexSlice := make([]int, len(answer.Cells))
 			for index := range filledOwnerIndexSlice {
@@ -106,7 +109,7 @@ func CalculateItemRangeListPatterns(quizItemAllocationPatterns quizpattern.QuizI
 				start, end := partQuizLineItem.SidesLength(j)
 				end = answer.Length() - 1 - end
 
-				fmt.Println(start, end)
+				logger.DebugLog(fmt.Sprintf("start:%d, end%d", start, end))
 
 				for k := start; k <= end; k++ {
 					// 範囲の中のFilledがそのquizItemだけのものか記録していく
@@ -132,29 +135,29 @@ func CalculateItemRangeListPatterns(quizItemAllocationPatterns quizpattern.QuizI
 					ir.start = max(ir.start, *itemRangeList[len(itemRangeList)-1].filledEnd+1)
 				}
 
-				fmt.Printf("ItemRange: %+v\n", ir)
+				logger.DebugLog(fmt.Sprintf("ItemRange: %+v", ir))
 
 				itemRangeList = append(itemRangeList, ir)
 			}
 
-			fmt.Printf("各数値が入る範囲: %+v\n", itemRangeList)
+			logger.DebugLog(fmt.Sprintf("各数値が入る範囲: %+v", itemRangeList))
 
-			fmt.Println(filledOwnerIndexSlice)
+			logger.DebugLog(fmt.Sprintf("%+v", filledOwnerIndexSlice))
 			for answerIndex, quizIndex := range filledOwnerIndexSlice {
 				if quizIndex > -1 {
-					fmt.Printf("調整前のitemRange: %+v\n", itemRangeList[quizIndex])
+					logger.DebugLog(fmt.Sprintf("調整前のitemRange: %+v", itemRangeList[quizIndex]))
 					itemRange := itemRangeList[quizIndex]
 					length := itemRange.item.Value
 					itemRangeList[quizIndex].start = max(itemRange.start, answer.Start+answerIndex-(length-1))
 					itemRangeList[quizIndex].end = min(itemRange.end, answer.Start+answerIndex+(length-1))
-					fmt.Printf("調整後のitemRange: %+v\n", itemRangeList[quizIndex])
+					logger.DebugLog(fmt.Sprintf("調整後のitemRange: %+v", itemRangeList[quizIndex]))
 				}
 			}
 		}
 		// 1パターン分できたのでpush
 		itemRangeListPatterns[h] = itemRangeList
 	}
-	fmt.Printf("各パターンごとの数値の取りうる範囲\n　　%+v\n", itemRangeListPatterns)
+	logger.DebugLog(fmt.Sprintf("各パターンごとの数値の取りうる範囲\n%+v", itemRangeListPatterns))
 
 	// 各パターンを回し、各QuizLineItemの入りうる範囲の一番広い範囲を計算する
 	maxItemRangeList := itemRangeListPatterns[0]

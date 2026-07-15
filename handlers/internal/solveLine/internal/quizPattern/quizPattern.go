@@ -2,7 +2,8 @@ package quizpattern
 
 import (
 	"fmt"
-	splitanswerline "picross/handlers/solveLine/internal/splitAnswerLine"
+	splitanswerline "picross/handlers/internal/solveLine/internal/splitAnswerLine"
+	"picross/logger"
 )
 
 // QuizLineの数字一つ分のデータ
@@ -102,7 +103,7 @@ func GenerateQuizPatterns(sal splitanswerline.SplittedAnswerLine, quizLine []int
 
 	var recFunc func(innerQuizLine []QuizLineItem, innerSal splitanswerline.SplittedAnswerLine) QuizItemAllocationPatterns
 	recFunc = func(innerQuizLine []QuizLineItem, innerSal splitanswerline.SplittedAnswerLine) QuizItemAllocationPatterns {
-		fmt.Printf("start recFunc\n　quiz: %+v target answer: %+v\n", innerQuizLine, innerSal[0])
+		logger.DebugLog(fmt.Sprintf("start recFunc\nquiz: %+v target answer: %+v", innerQuizLine, innerSal[0]))
 		var wholePatterns QuizItemAllocationPatterns
 		if len(innerQuizLine) == 0 {
 			// innerSalの長さ分partを含める必要がある
@@ -118,14 +119,14 @@ func GenerateQuizPatterns(sal splitanswerline.SplittedAnswerLine, quizLine []int
 				)
 			} else {
 				// 入り切らないケースはnilとしてしまう
-				fmt.Printf(
-					"finish recFunc\n　quiz: %+v target answer: %+v result: nil\n",
+				logger.DebugLog(fmt.Sprintf(
+					"finish recFunc\nquiz: %+v target answer: %+v result: nil",
 					innerQuizLine, innerSal[0],
-				)
+				))
 				return nil
 			}
 		} else {
-			fmt.Println("current part: []")
+			logger.DebugLog("current part: []")
 			patterns := recFunc(innerQuizLine, innerSal[1:])
 			if patterns != nil {
 				for i := range patterns {
@@ -134,7 +135,7 @@ func GenerateQuizPatterns(sal splitanswerline.SplittedAnswerLine, quizLine []int
 						patterns[i]...,
 					)
 				}
-				fmt.Printf("append pattern: %+v\n", patterns)
+				logger.DebugLog(fmt.Sprintf("append pattern: %+v", patterns))
 				wholePatterns = append(wholePatterns, patterns...)
 			}
 
@@ -143,7 +144,7 @@ func GenerateQuizPatterns(sal splitanswerline.SplittedAnswerLine, quizLine []int
 				if !innerSal[0].IsContainable(convertPrimitiveQuizLine(target)) {
 					break
 				}
-				fmt.Println("current part:", innerQuizLine[:i+1])
+				logger.DebugLog(fmt.Sprintf("current part: %+v", innerQuizLine[:i+1]))
 				patterns = recFunc(innerQuizLine[i+1:], innerSal[1:])
 				if patterns != nil {
 					for j := range patterns {
@@ -154,12 +155,12 @@ func GenerateQuizPatterns(sal splitanswerline.SplittedAnswerLine, quizLine []int
 							patterns[j]...,
 						)
 					}
-					fmt.Printf("append pattern: %+v\n", patterns)
+					logger.DebugLog(fmt.Sprintf("append pattern: %+v", patterns))
 					wholePatterns = append(wholePatterns, patterns...)
 				}
 			}
 		}
-		fmt.Printf("finish recFunc\n　quiz: %+v target answer: %+v result: %+v\n", innerQuizLine, innerSal[0], wholePatterns)
+		logger.DebugLog(fmt.Sprintf("finish recFunc\nquiz: %+v target answer: %+v result: %+v", innerQuizLine, innerSal[0], wholePatterns))
 		return wholePatterns
 	}
 	return recFunc(workingQuizLineItems, sal)

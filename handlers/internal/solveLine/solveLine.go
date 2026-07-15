@@ -2,9 +2,10 @@ package solveLine
 
 import (
 	"fmt"
-	itemrangelist "picross/handlers/solveLine/internal/itemRangeList"
-	quizpattern "picross/handlers/solveLine/internal/quizPattern"
-	splitanswerline "picross/handlers/solveLine/internal/splitAnswerLine"
+	itemrangelist "picross/handlers/internal/solveLine/internal/itemRangeList"
+	quizpattern "picross/handlers/internal/solveLine/internal/quizPattern"
+	splitanswerline "picross/handlers/internal/solveLine/internal/splitAnswerLine"
+	"picross/logger"
 	"picross/schemas"
 	"slices"
 )
@@ -47,16 +48,16 @@ func (a AnswerLine) getQuizItemRangeList(quizLine []int) itemrangelist.ItemRange
 	// Unfilledが連続しても1つ分のUnfilledとみなして分割する
 	// [_,_,◼,_,_,x,_,_,x,x,_,_,x] => [[_,_,◼,_,_],[_,_],[_,_]]
 	splittedAnswerLine := splitanswerline.SplitAnswerLine(a)
-	fmt.Printf("xのない部分を分割\n　　%+v\n", splittedAnswerLine)
+	logger.DebugLog(fmt.Sprintf("xのない部分を分割\n%+v", splittedAnswerLine))
 
 	// splittedAnswerLinesの各要素に、quizLineの要素をどう割り当てられるか、パターンを全探索する
 	quizItemPatterns := quizpattern.GenerateQuizPatterns(splittedAnswerLine, quizLine)
-	fmt.Printf("分割したエリアごとにこの行の問題の数値を割り振る全パターン\n　　%+v\n", quizItemPatterns)
+	logger.DebugLog(fmt.Sprintf("分割したエリアごとにこの行の問題の数値を割り振る全パターン\n%+v", quizItemPatterns))
 
 	// QuizLineの各数値がAnswerLineのどの範囲に入りうるかの全パターンを計算する
 	// そして、start, endを全パターンで比較して、最も広い範囲をitemRangeとする
 	itemRangeList := itemrangelist.CalculateItemRangeListPatterns(quizItemPatterns, len(quizLine), splittedAnswerLine)
-	fmt.Printf("この行の問題の各数値がどの範囲に入りうるか\n　　%+v\n", itemRangeList)
+	logger.DebugLog(fmt.Sprintf("この行の問題の各数値がどの範囲に入りうるか\n%+v", itemRangeList))
 
 	return itemRangeList
 }
@@ -107,7 +108,7 @@ func (a AnswerLine) unfilledUnreachableArea(irl itemrangelist.ItemRangeList) boo
 	}
 
 	if isChanged {
-		fmt.Println("unreachable debug: isChanged")
+		logger.DebugLog("unreachable debug: isChanged")
 	}
 
 	return isChanged

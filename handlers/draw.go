@@ -7,6 +7,7 @@ import (
 	"image/draw"
 	"image/png"
 	"os"
+	"picross/logger"
 	"picross/schemas"
 )
 
@@ -84,7 +85,7 @@ func DrawAnswerImage(answer schemas.Answer, outputPath string) {
 	if _, err := os.Stat(outputPath); err == nil {
 		os.Remove(outputPath)
 	} else if !os.IsNotExist(err) {
-		fmt.Println("ファイルの存在確認中にエラーが発生しました:", err)
+		logger.ErrorLog(fmt.Sprintf("ファイルの存在確認中にエラーが発生しました: %+v", err))
 		return
 	}
 	// ファイルを保存
